@@ -109,3 +109,6 @@ Task 0.4: complete (commits 05ba4c1..9b4dc39, review clean)
 Milestone 0: complete.
 Task 1.1: Ruling: lexer mirrors ns-eel2's DFA (no dots in identifiers; lone `.` = 0) but keeps `1e3` exponents as the plan requires although ns-eel2 lexes `1e3` as `1` `e3` — exponents never appear in real presets as intended exponents is the bet — cost if wrong: a preset relying on `1e3` meaning `1*e3`-style juxtaposition would differ (practically nil).
 Task 1.1: Note for Task 1.2: ns-eel2's preprocessor handles `;` inside parentheses specially (verify in nseel-compiler.c and mirror it in the parser).
+Task 1.1: minor (deferred → folded into Task 1.2 dispatch): `.e3` swallows identifier e3 (exponent attempted with no mantissa digits).
+Task 1.1: minor (deferred): `$x` does not mirror strtoul whitespace/sign skipping; NUL byte errors instead of terminating; unreachable defensive fallbacks uncommented.
+Task 1.1: complete (commits 00ac4c1..e13ace4, review clean)
