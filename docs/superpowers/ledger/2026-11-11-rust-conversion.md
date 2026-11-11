@@ -117,3 +117,7 @@ Task 1.2: Ruling: `(a+b)=3` is a CompileError (C silently writes a scratch slot)
 Task 1.2: Ruling (binds Task 1.3): variable names compare on their first 16 characters (NSEEL_MAX_VARIABLE_NAMELEN) — Vm::var truncates — cost if wrong: none.
 Task 1.2: Ruling (binds Task 1.4): assignment stores 0 when the value is denormal, ±Inf or NaN, mirroring asm-nseel-x86-msvc.c:575-660 — cost if wrong: presets that propagate inf would differ.
 Task 1.2: Note (Task 1.4/1.5): `^` and pow() both arrive as Call "pow". Note (Task 1.7): AST printers must fully parenthesize.
+Task 1.2: minor (deferred): signed exponents diverge from C text-scan (`x^1e-3` → C: pow(x,1e)-3; Rust: pow(x,0.001)) — Ruling: keep Rust's reading; consistent with the Task 1.1 exponent ruling — cost if wrong: nil in practice.
+Task 1.2: minor (deferred → Task 1.7/1.8): preprocessing is quadratic on pathological left-wrapping input (`a||`×5000 ≈1.2 s release) before the depth cap fires; bound it by counting wrap depth.
+Task 1.2: minor (deferred): `(a;.5)` accepted where C rejects; `x[0.0]` lowered to `_mem x` (same value, different AST).
+Task 1.2: complete (commits 305ff3f..9079c57, review clean)
