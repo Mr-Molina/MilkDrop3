@@ -25,4 +25,4 @@ pub use lexer::Lexer;
 pub use mem::{GlobalMem, MegaBuf};
 pub use parser::parse;
 pub use token::Tok;
-pub use vm::{VarRef, Vm};
+pub use vm::{VarRef, Vm, LOOP_CAP};
