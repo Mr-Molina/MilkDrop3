@@ -90,3 +90,6 @@ Task 0.2: minor (deferred): SSIM compares luma only (chroma/alpha-only changes s
 Task 0.2: minor (deferred): corrupt/unreadable golden treated as missing without surfacing the error; create_dir_all error discarded; stale .diff.png not removed on pass.
 Task 0.2: minor (deferred): FixedClock::new(0.0) unguarded; corpus walk follows symlinks (cycle risk); convoluted shift-test setup.
 Task 0.2: fix round 1/5 dispatched (Important: no analytic-value SSIM test)
+Task 0.2: fix round 1/5 (1 addressed, 0 open; commits d99f1a2..f2fe230)
+Task 0.2: minor (deferred): SSIM structure/covariance term pinned only indirectly (inverse-sign test); a non-constant analytic case would pin it exactly.
+Task 0.2: complete (commits 0e15fcd..f2fe230, review clean after 1 fix round)
