@@ -97,3 +97,55 @@ fn fixed_clock_advances_by_frame() {
     c.advance();
     assert!((c.now() - 2.0 / 60.0).abs() < 1e-12);
 }
+
+fn gray(w: u32, h: u32, f: impl Fn(u32, u32) -> u8) -> RgbaImage {
+    RgbaImage::from_fn(w, h, |x, y| {
+        let v = f(x, y);
+        Rgba([v, v, v, 255])
+    })
+}
+
+#[test]
+fn ssim_of_constant_images_matches_analytic_value() {
+    let c1 = (0.01_f64 * 255.0).powi(2);
+    for (ma, mb) in [(100u8, 200u8), (0, 255), (50, 60), (128, 128)] {
+        let a = gray(24, 24, |_, _| ma);
+        let b = gray(24, 24, |_, _| mb);
+        let (fa, fb) = (f64::from(ma), f64::from(mb));
+        let expected = (2.0 * fa * fb + c1) / (fa * fa + fb * fb + c1);
+        let got = md_testkit::ssim(&a, &b);
+        assert!(
+            (got - expected).abs() < 1e-9,
+            "{ma}/{mb}: got {got}, expected {expected}"
+        );
+    }
+}
+
+#[test]
+fn dssim_of_constant_images_is_reciprocal_minus_one() {
+    let dir = tmp("constdssim");
+    let g = dir.join("g.png");
+    gray(24, 24, |_, _| 200).save(&g).unwrap();
+    let c1 = (0.01_f64 * 255.0).powi(2);
+    let ssim = (2.0 * 100.0 * 200.0 + c1) / (100.0 * 100.0 + 200.0 * 200.0 + c1);
+    let r = compare_png_with(&gray(24, 24, |_, _| 100), &g, 10.0, false);
+    assert!(
+        (r.dssim - (1.0 / ssim - 1.0)).abs() < 1e-9,
+        "dssim {}",
+        r.dssim
+    );
+}
+
+#[test]
+fn inverted_image_scores_very_low_ssim() {
+    let a = gray(48, 48, |x, y| (((x * 5 + y * 3) % 17) * 15) as u8);
+    let b = gray(48, 48, |x, y| 255 - (((x * 5 + y * 3) % 17) * 15) as u8);
+    let s = md_testkit::ssim(&a, &b);
+    assert!(s < 0.0, "anticorrelated ssim should be negative, got {s}");
+    let dir = tmp("inv");
+    let g = dir.join("g.png");
+    b.save(&g).unwrap();
+    let r = compare_png_with(&a, &g, 0.01, false);
+    assert!(!r.passed);
+    assert!(r.dssim > 1.0, "dssim {}", r.dssim);
+}
