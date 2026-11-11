@@ -144,3 +144,6 @@ Task 1.7: complete (commits 493c20c..2d4143f, review clean)
 Task 1.9: complete (commits 2d4143f..0d517b7, review clean)
 Task 1.8: Ruling: no criterion (criterion 0.8 pulls `cc` via `alloca`; cargo-deny rejects) — std-only `harness = false` bench; measured 0.46 ms / 4225 evals (Xeon 2.1 GHz) vs 2 ms budget, so no fast path was added — cost if wrong: none.
 Task 1.8: minor (deferred → next touch of scripts/): check-no-native-build.sh inspects only normal+build edges; dev-dependencies (`-e dev`) should be included too (cargo-deny already catches them).
+Task 1.8: minor (deferred): TOO_DEEP placeholder reports the outermost doomed operator's offset (less precise error location); commit subject says "fast path" though none was needed (plan wording).
+Task 1.8: complete (commits 68e13ed..595d7d3, review clean)
+Milestone 1: complete.
