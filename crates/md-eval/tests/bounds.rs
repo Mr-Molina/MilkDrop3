@@ -83,8 +83,13 @@ fn division_by_zero_yields_inf_not_panic() {
     assert_eq!(ev("x=0; 5/x"), f64::INFINITY);
     // compound division by zero stores raw (only plain `=` filters)
     assert_eq!(ev("a=2; a/=0; a"), f64::INFINITY);
-    // `%` by zero must not panic either
-    let _ = ev("5 % 0");
+    // `%` by zero: nseel_asm_mod skips the `div` when the chopped |divisor|
+    // is 0 and returns edx = 0 (Task 1.4 `%` ruling). A divisor that chops
+    // to 0 counts as zero too; compound `%=` takes the same path.
+    assert_eq!(ev("5 % 0").to_bits(), 0.0f64.to_bits());
+    assert_eq!(ev("5 % 0.5").to_bits(), 0.0f64.to_bits());
+    assert_eq!(ev("(-7) % (-0.9)").to_bits(), 0.0f64.to_bits());
+    assert_eq!(ev("a=5; a %= 0; a").to_bits(), 0.0f64.to_bits());
 }
 
 #[test]

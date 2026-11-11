@@ -260,3 +260,51 @@ proptest! {
         run_if_compiles(&toks.join(" "));
     }
 }
+
+// ---------------------------------------------------------------------
+// `while` / variable-count `loop`: compile only (running them could take
+// 1,048,576^depth iterations)
+// ---------------------------------------------------------------------
+
+/// Random ASTs with `while(body)` and `loop(count, body)` nodes whose count
+/// is an arbitrary expression (variables, assignments, calls).
+fn loopy_expr() -> impl Strategy<Value = Expr> {
+    expr().prop_recursive(3, 24, 2, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|b| call("while", vec![b])),
+            (inner.clone(), inner.clone()).prop_map(|(n, b)| call("loop", vec![n, b])),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| Expr::Seq(vec![a, b])),
+        ]
+    })
+}
+
+const LOOP_SOUP: [&str; 16] = [
+    "while(", "loop(", "while", "loop", "(", ")", ")", ",", ";", "a", "x=", "1", "n", "+=",
+    "megabuf(", "-",
+];
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Well-formed `while`/`loop` programs with arbitrary arguments compile.
+    #[test]
+    fn printed_loop_asts_compile(ast in loopy_expr()) {
+        let src = source(&ast);
+        Program::compile(&mut vm(), &src)
+            .map_err(|e| TestCaseError::fail(format!("{src}: {e}")))?;
+    }
+
+    /// Malformed `while(`/`loop(` soups never panic the compiler.
+    #[test]
+    fn loop_soup_compile_never_panics(
+        toks in prop::collection::vec(
+            prop_oneof![
+                prop::sample::select(&LOOP_SOUP[..]),
+                prop::sample::select(&SOUP[..]),
+            ],
+            0..48,
+        )
+    ) {
+        let _ = Program::compile(&mut vm(), &toks.join(" "));
+    }
+}

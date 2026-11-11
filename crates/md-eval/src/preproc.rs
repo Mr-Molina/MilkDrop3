@@ -21,6 +21,7 @@
 //! Synthetic tokens carry the byte offset of the operator they replace.
 
 use crate::error::CompileError;
+use crate::parser::MAX_NESTING;
 use crate::token::Tok;
 
 pub(crate) type Spanned = (Tok, usize);
@@ -107,10 +108,12 @@ fn is_primary(t: &Tok) -> bool {
 
 /// Rewrite a token stream (without the trailing `Eof`).
 pub(crate) fn preprocess(src: &[Spanned]) -> Result<Vec<Spanned>, CompileError> {
-    run(src, 0)
+    run(src, 0, 0)
 }
 
-fn run(src: &[Spanned], depth: usize) -> Result<Vec<Spanned>, CompileError> {
+/// `base` is a lower bound on the parenthesis depth at which this run's
+/// output ends up in the final token stream.
+fn run(src: &[Spanned], depth: usize, base: usize) -> Result<Vec<Spanned>, CompileError> {
     if depth > MAX_DEPTH {
         let off = src.first().map_or(0, |t| t.1);
         return Err(CompileError::new(off, "expression nested too deeply"));
@@ -152,25 +155,70 @@ fn run(src: &[Spanned], depth: usize) -> Result<Vec<Spanned>, CompileError> {
                             buf.split_off(start)
                         }
                     };
+                    // The rewrite emits `name(` at depth `base + parens`
+                    // (every unclosed `(` precedes the left operand). A
+                    // chain of left-wrapping operators (`a||a||...`) nests
+                    // the whole output one level deeper per operator. Once
+                    // the result can no longer parse, emit one TOO_DEEP
+                    // token instead of rebuilding the buffer thousands of
+                    // times. It is not an error yet: `gmem[i]` may still
+                    // discard it as part of its left operand.
+                    let inner = base + parens + 1;
+                    let gmem = matches!(rewrite, Rewrite::Index) && is_gmem(&lhs);
                     let end = right_end(src, i, right);
-                    let rhs = run(&src[i..end], depth + 1)?;
+                    let rhs = run(&src[i..end], depth + 1, inner)?;
                     i = end;
+                    let doomed = has_too_deep(&rhs)
+                        || if gmem {
+                            inner >= MAX_NESTING
+                        } else {
+                            has_too_deep(&lhs) || inner + paren_depth(&lhs) >= MAX_NESTING
+                        };
                     match rewrite {
+                        _ if doomed => buf.push((Tok::Ident(TOO_DEEP.to_string()), off)),
                         Rewrite::Call(name) => call(&mut buf, name, off, &[&lhs, &rhs]),
                         Rewrite::Not => call(&mut buf, "_not", off, &[&rhs]),
                         Rewrite::Ternary => ternary(&mut buf, off, &lhs, &rhs),
-                        Rewrite::Index => {
-                            index(&mut buf, off, &lhs, &rhs);
-                            if matches!(src.get(i), Some((Tok::RBracket, _))) {
-                                i += 1;
-                            }
-                        }
+                        Rewrite::Index => index(&mut buf, off, &lhs, &rhs),
+                    }
+                    if matches!(rewrite, Rewrite::Index)
+                        && matches!(src.get(i), Some((Tok::RBracket, _)))
+                    {
+                        i += 1;
                     }
                 }
             },
         }
     }
     Ok(buf)
+}
+
+/// Placeholder for a rewrite whose output nests deeper than the parser
+/// accepts; the parser rejects it as "expression nested too deeply". The
+/// lexer never produces an identifier containing NUL.
+pub(crate) const TOO_DEEP: &str = "\0too deep";
+
+fn has_too_deep(toks: &[Spanned]) -> bool {
+    toks.iter()
+        .any(|(t, _)| matches!(t, Tok::Ident(n) if n == TOO_DEEP))
+}
+
+/// Deepest parenthesis nesting inside `toks`. A token inside `d` open
+/// parentheses makes the parser recurse `d + 1` levels, so a statement
+/// whose tokens reach depth [`MAX_NESTING`] can never parse.
+fn paren_depth(toks: &[Spanned]) -> usize {
+    let (mut d, mut max) = (0usize, 0usize);
+    for (t, _) in toks {
+        match t {
+            Tok::LParen => {
+                d += 1;
+                max = max.max(d);
+            }
+            Tok::RParen => d = d.saturating_sub(1),
+            _ => {}
+        }
+    }
+    max
 }
 
 /// Start of the left operand at the end of `buf`.
@@ -297,18 +345,21 @@ fn ternary(buf: &mut Vec<Spanned>, off: usize, cond: &[Spanned], rhs: &[Spanned]
     call(buf, "_if", off, &[cond, then, other]);
 }
 
-/// `x[i]` -> `_mem((x)+(i))` (or `_mem(x)` when `i` is empty or `0`);
-/// `gmem[i]` -> `_gmem(i)`.
-fn index(buf: &mut Vec<Spanned>, off: usize, base: &[Spanned], idx: &[Spanned]) {
-    // C: the left text starts with "gmem" followed by end or whitespace.
-    let is_gmem = match base {
+/// C: the left text of `[` starts with "gmem" followed by end or whitespace.
+fn is_gmem(base: &[Spanned]) -> bool {
+    match base {
         [(Tok::Ident(g), _)] => g == "gmem",
         [(Tok::Ident(g), g_off), (next, n_off), ..] => {
             g == "gmem" && (!matches!(next, Tok::LParen) || *n_off > g_off + 4)
         }
         _ => false,
-    };
-    if is_gmem {
+    }
+}
+
+/// `x[i]` -> `_mem((x)+(i))` (or `_mem(x)` when `i` is empty or `0`);
+/// `gmem[i]` -> `_gmem(i)`.
+fn index(buf: &mut Vec<Spanned>, off: usize, base: &[Spanned], idx: &[Spanned]) {
+    if is_gmem(base) {
         let zero = [(Tok::Num(0.0), off)];
         call(
             buf,

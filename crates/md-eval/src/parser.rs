@@ -16,12 +16,12 @@
 
 use crate::ast::{AssignOp, BinOp, Expr, UnOp};
 use crate::error::CompileError;
-use crate::preproc::{preprocess, Spanned};
+use crate::preproc::{preprocess, Spanned, TOO_DEEP};
 use crate::token::Tok;
 
 /// Bound on parenthesis / unary nesting in one statement (bison's own stack
 /// is 5000 states; this keeps the recursive descent off the guard page).
-const MAX_NESTING: usize = 400;
+pub(crate) const MAX_NESTING: usize = 400;
 
 /// Parse a token stream (as produced by [`crate::Lexer::tokenize`]; the
 /// trailing `Eof` is optional). The value of the program is the value of
@@ -311,6 +311,9 @@ impl Parser<'_> {
                 let e = self.expr(0)?;
                 self.expect_rparen()?;
                 Ok(e)
+            }
+            Tok::Ident(name) if name == TOO_DEEP => {
+                Err(CompileError::new(off, "expression nested too deeply"))
             }
             Tok::Ident(name) => {
                 self.pos += 1;

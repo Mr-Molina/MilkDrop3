@@ -316,6 +316,78 @@ fn deep_nesting_is_an_error_not_a_stack_overflow() {
     try_p(&("-".repeat(350) + "x")).unwrap();
 }
 
+/// Left-wrapping operators (`||`, `&&`, `%`, `^`, `[ ]`) re-wrap the whole
+/// output so far, one nesting level per operator. Once that depth must
+/// exceed the parser's cap the preprocessor collapses the rewrite to one
+/// placeholder instead of building 5000 levels quadratically (seconds in
+/// release before the fix).
+#[test]
+fn pathological_left_wrapping_fails_fast() {
+    let cases = [
+        "a||".repeat(5000) + "a",
+        "a&&".repeat(5000) + "a",
+        "a%".repeat(5000) + "a",
+        "2^2".repeat(5000),
+        "x[1]".repeat(5000),
+        "x".to_string() + &"[1]".repeat(5000),
+        "(a)||".repeat(5000) + "a",
+    ];
+    for src in &cases {
+        let t = std::time::Instant::now();
+        let e = err(src);
+        let took = t.elapsed();
+        assert!(
+            e.message.contains("nested too deeply"),
+            "{}...: {e}",
+            &src[..12]
+        );
+        // generous in any profile; the fix takes ~1 ms in release
+        assert!(took.as_secs_f64() < 1.0, "{}...: {took:?}", &src[..12]);
+    }
+}
+
+/// The early bail-out must not move the limits: these are the largest
+/// chains that parsed before it was added.
+#[test]
+fn left_wrapping_limits_are_unchanged() {
+    type Make = fn(usize) -> String;
+    let limits: [(Make, usize); 8] = [
+        (|n| "a||".repeat(n) + "a", 399),
+        (|n| "a%".repeat(n) + "a", 399),
+        (|n| "2^".repeat(n) + "2", 399),
+        (|n| "x".to_string() + &"[1]".repeat(n), 199),
+        (|n| "(a)||".repeat(n) + "a", 398),
+        (|n| format!("(((((({}a))))))", "a||".repeat(n)), 393),
+        (|n| format!("y=b=({}a)", "a||".repeat(n)), 396),
+        (|n| format!("sin(sin({}a))", "a||".repeat(n)), 397),
+    ];
+    for (make, max) in limits {
+        try_p(&make(max)).unwrap_or_else(|e| panic!("n={max}: {e}"));
+        let e = err(&make(max + 1));
+        assert!(
+            e.message.contains("nested too deeply"),
+            "n={}: {e}",
+            max + 1
+        );
+    }
+}
+
+/// `gmem[i]` drops the text to its left (`gmem ((x))[1]` is `_gmem(1)`),
+/// so deep nesting there never reaches the parser and must not be an error.
+#[test]
+fn gmem_left_operand_does_not_count_toward_nesting() {
+    let deep = format!("gmem {}x{}[1]", "(".repeat(450), ")".repeat(450));
+    assert_eq!(p(&deep), "(_gmem 1)");
+    // ... including over-deep rewrites inside it
+    let deep = format!("gmem {}a||b{}[1]", "(".repeat(399), ")".repeat(399));
+    assert_eq!(p(&deep), "(_gmem 1)");
+    let chain = format!("gmem ({}a)[1]", "a||".repeat(5000));
+    assert_eq!(p(&chain), "(_gmem 1)");
+    // but not the index itself
+    let chain = format!("gmem[{}a]", "a||".repeat(5000));
+    assert!(err(&chain).message.contains("nested too deeply"));
+}
+
 #[test]
 fn syntax_zoo_lines() {
     assert_eq!(p("v = 2^3^0.5"), "(= v (pow (pow 2 3) 0.5))");
