@@ -150,3 +150,7 @@ Milestone 1: complete.
 Tasks 2.1/2.2: Ruling: batched (small, same crate); code_block returns lines joined with '\n' as ReadCode assembles them and a separate md_preset::strip_code mirrors StripLinefeedCharsAndComments — cost if wrong: none. Base fe76b50.
 Task 2.1: Ruling: .milk reads use a section-blind, case-sensitive "flat" lookup mirroring _GetLineByName (key ends at first `=` or space, values untrimmed; `code_block(prefix)` without a section, stops at 32768 bytes); a separate sectioned case-insensitive trimmed API serves milk2.ini (F49). Not mirrored: the per-file line-hint that can pick a later duplicate key, and ~125-char key truncation — cost if wrong: a preset with duplicate keys picks a different one than C++.
 Task 2.2: Note: Blendable::eval is pure (C++ clears the blending flag as a side effect); no compound-assign ops yet — add in 2.5 if needed.
+Tasks 2.1/2.2: minor (deferred → folded into Task 2.3): lone-CR test/doc wrongly claims C++ parity; no regression test for prefix pitfalls (per_frame_1 vs per_frame_10, zoom vs zoomexp).
+Tasks 2.1/2.2: minor (deferred): flat_get linear scan (O(keys×lines)); scan_i32 overflow → default; no inf/nan; sectioned API doesn't strip surrounding quotes (note for Task 8.1).
+Task 2.1: complete (commits 68e9f34..f1c3609, review clean)
+Task 2.2: complete (commits f1c3609..fcbb1a3, review clean)

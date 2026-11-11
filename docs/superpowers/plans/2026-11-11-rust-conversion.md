@@ -394,11 +394,11 @@ The `.milk` format is an INI file with a single `[preset00]` section, scalar key
 - Produces: `pub struct Ini { pub fn parse(text: &str) -> Ini; pub fn get(&self, section: &str, key: &str) -> Option<&str>; pub fn get_f32(&self, s: &str, k: &str, default: f32) -> f32; pub fn get_i32(..); pub fn get_bool(..); pub fn code_block(&self, section: &str, prefix: &str) -> String /* joins prefix1, prefix2, ... until the first missing number, with '\n' */ }`.
 - Rules: case-insensitive section and key lookup; first occurrence wins; values are not trimmed of interior whitespace but leading and trailing whitespace is removed; a value may contain `=`; lines starting with `;` are comments; `\r\n` and a UTF-8 BOM are accepted.
 
-- [ ] **Step 1:** Write failing tests `first_duplicate_key_wins`, `value_may_contain_equals`, `code_block_stops_at_gap` (`per_frame_1`, `per_frame_2`, `per_frame_4` -> two lines), `backtick_prefix_is_stripped`, `parses_crlf_bom_and_trailing_junk`.
-- [ ] **Step 2:** Run `cargo test -p md-preset ini`. Expected: FAIL.
-- [ ] **Step 3:** Implement with a `HashMap<String, Vec<(String, String)>>` keyed by lowercased section.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(preset): INI reader`
+- [x] **Step 1:** Write failing tests `first_duplicate_key_wins`, `value_may_contain_equals`, `code_block_stops_at_gap` (`per_frame_1`, `per_frame_2`, `per_frame_4` -> two lines), `backtick_prefix_is_stripped`, `parses_crlf_bom_and_trailing_junk`.
+- [x] **Step 2:** Run `cargo test -p md-preset ini`. Expected: FAIL.
+- [x] **Step 3:** Implement with a `HashMap<String, Vec<(String, String)>>` keyed by lowercased section.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(preset): INI reader`
 
 ### Task 2.2: Blendable values
 
@@ -408,11 +408,11 @@ The `.milk` format is an INI file with a single `[preset00]` section, scalar key
 **Interfaces:**
 - Produces: `Blendable` as in A.3 with `pub fn set(&mut self, v: f32)` (no blend), `pub fn blend_to(&mut self, from: f32, to: f32, start: f32, end: f32)`, `pub fn eval(&self, time: f32) -> f32` returning `start + (end-start) * clamp((time-start_time)/(end_time-start_time), 0, 1)`, matching `CBlendableFloat::eval` in `state.cpp`.
 
-- [ ] **Step 1:** Write failing tests `eval_before_start_returns_start`, `eval_after_end_returns_end`, `eval_midway_is_linear`, `zero_duration_returns_end`.
-- [ ] **Step 2:** Run the tests. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(preset): blendable floats`
+- [x] **Step 1:** Write failing tests `eval_before_start_returns_start`, `eval_after_end_returns_end`, `eval_midway_is_linear`, `zero_duration_returns_end`.
+- [x] **Step 2:** Run the tests. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(preset): blendable floats`
 
 ### Task 2.3: Preset model and parser
 
