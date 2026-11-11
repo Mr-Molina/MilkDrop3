@@ -1,0 +1,37 @@
+# cargo-deny policy (Task 0.3). Run: cargo deny check
+[graph]
+all-features = false
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "ISC",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+# No crate that compiles C/C++ may enter the graph. cc is a build-dependency of two winit
+# platform crates whose C compilation is feature-gated off (`log` / `game-activity`);
+# scripts/check-no-native-build.sh asserts those features stay disabled.
+deny = [
+    { name = "cc", wrappers = ["wayland-backend", "android-activity"] },
+    { name = "cmake" },
+    { name = "bindgen" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
