@@ -80,3 +80,4 @@ Ruling: assert `|env[0]| < 1e-6` and `env[575] < 1e-4` — the formula is not ex
 
 ## Tasks
 
+Task 0.1: dispatched (base 19f6cc9, implementer sonnet)
