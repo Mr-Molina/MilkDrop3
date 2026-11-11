@@ -347,21 +347,21 @@ Semantics are those of ns-eel2 as built in `code/ns-eel2/` with `NSEEL_REENTRANT
 - Modify: `crates/md-eval/src/vm.rs`
 - Test: `crates/md-eval/tests/bounds.rs`
 
-- [ ] **Step 1:** Write failing tests `while_is_capped_at_1_048_576_iterations` (`i=0; while(i=i+1)` finishes and `i` equals the cap), `loop_negative_count_runs_zero_times`, `division_by_zero_yields_inf_not_panic`, `nan_is_falsy`.
-- [ ] **Step 2:** Run `cargo test -p md-eval --test bounds`. Expected: FAIL.
-- [ ] **Step 3:** Implement caps; the cap constant is `pub const LOOP_CAP: u32 = 1_048_576` (`NSEEL_LOOPFUNC_SUPPORT_MAXLEN` in `code/ns-eel2/ns-eel.h`).
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(eval): loop caps and non-panicking arithmetic`
+- [x] **Step 1:** Write failing tests `while_is_capped_at_1_048_576_iterations` (`i=0; while(i=i+1)` finishes and `i` equals the cap), `loop_negative_count_runs_zero_times`, `division_by_zero_yields_inf_not_panic`, `nan_is_falsy`.
+- [x] **Step 2:** Run `cargo test -p md-eval --test bounds`. Expected: FAIL.
+- [x] **Step 3:** Implement caps; the cap constant is `pub const LOOP_CAP: u32 = 1_048_576` (`NSEEL_LOOPFUNC_SUPPORT_MAXLEN` in `code/ns-eel2/ns-eel.h`).
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(eval): loop caps and non-panicking arithmetic`
 
 ### Task 1.7: Fuzz and property tests
 
 **Files:**
 - Create: `crates/md-eval/fuzz/` (cargo-fuzz target `compile_and_run`), `crates/md-eval/tests/props.rs`
 
-- [ ] **Step 1:** Write a proptest in `props.rs`: for random ASTs printed back to source, `compile` succeeds and `run` terminates within 100 ms.
-- [ ] **Step 2:** Write the fuzz target: arbitrary bytes -> `Program::compile`; if it compiles, `run` with a 100 ms budget; never panics.
-- [ ] **Step 3:** Run `cargo test -p md-eval --test props` (PASS) and `cargo +nightly fuzz run compile_and_run -- -max_total_time=60` locally (no crash). CI runs only the proptest.
-- [ ] **Step 4:** Commit: `test(eval): property and fuzz tests`
+- [x] **Step 1:** Write a proptest in `props.rs`: for random ASTs printed back to source, `compile` succeeds and `run` terminates within 100 ms.
+- [x] **Step 2:** Write the fuzz target: arbitrary bytes -> `Program::compile`; if it compiles, `run` with a 100 ms budget; never panics.
+- [x] **Step 3:** Run `cargo test -p md-eval --test props` (PASS) and `cargo +nightly fuzz run compile_and_run -- -max_total_time=60` locally (no crash). CI runs only the proptest.
+- [x] **Step 4:** Commit: `test(eval): property and fuzz tests`
 
 ### Task 1.8: Performance budget
 
@@ -377,9 +377,9 @@ Semantics are those of ns-eel2 as built in `code/ns-eel2/` with `NSEEL_REENTRANT
 **Files:**
 - Create: `crates/md-eval/tests/corpus.rs`
 
-- [ ] **Step 1:** Write test `every_corpus_expression_compiles`: for each preset in `md_testkit::corpus_presets()`, extract the raw text of keys `per_frame_init_N`, `per_frame_N`, `per_pixel_N`, `wave_I_init_N`, `wave_I_per_frame_N`, `wave_I_per_point_N`, `shape_I_init_N`, `shape_I_per_frame_N` (a minimal regex scan, since `md-preset` does not exist yet), join lines with `\n`, and assert `Program::compile` succeeds; print the failing preset path and `CompileError` otherwise.
-- [ ] **Step 2:** Run `cargo test -p md-eval --test corpus`. Expected: PASS for 100% of presets. Each failure is a language-feature bug to fix in Tasks 1.1-1.5 before this task is closed.
-- [ ] **Step 3:** Commit: `test(eval): compile every corpus expression`
+- [x] **Step 1:** Write test `every_corpus_expression_compiles`: for each preset in `md_testkit::corpus_presets()`, extract the raw text of keys `per_frame_init_N`, `per_frame_N`, `per_pixel_N`, `wave_I_init_N`, `wave_I_per_frame_N`, `wave_I_per_point_N`, `shape_I_init_N`, `shape_I_per_frame_N` (a minimal regex scan, since `md-preset` does not exist yet), join lines with `\n`, and assert `Program::compile` succeeds; print the failing preset path and `CompileError` otherwise.
+- [x] **Step 2:** Run `cargo test -p md-eval --test corpus`. Expected: PASS for 100% of presets. Each failure is a language-feature bug to fix in Tasks 1.1-1.5 before this task is closed.
+- [x] **Step 3:** Commit: `test(eval): compile every corpus expression`
 
 ## Milestone 2: `md-preset`, the preset model
 

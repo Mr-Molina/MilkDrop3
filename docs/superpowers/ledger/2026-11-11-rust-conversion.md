@@ -137,3 +137,8 @@ Task 1.5: minor (deferred): sign(NaN) sign not pinned; no tan test at the 2^63 b
 Task 1.5: complete (commits 087237a..0cab19c, review clean)
 Tasks 1.6/1.7/1.9: Ruling: dispatched as ONE batch (three small test-centric tasks on md-eval, one commit each, reviewed as one unit) — they share files and most behaviour already exists — cost if wrong: a larger review surface.
 Task 1.9: Ruling: code lines are joined with NO separator (StripLinefeedCharsAndComments, ledger Task 0.4 ruling), not "\n" as the brief says; the existing tests/corpus_parse.rs from Task 1.2 is extended/reused rather than duplicating the extraction — cost if wrong: none.
+Tasks 1.6/1.7/1.9: minor (deferred → folded into Task 1.8 dispatch): while/variable-count loop never compile-fuzzed; proptest lacks `handle-panics` feature; `5 % 0` not pinned to its exact value.
+Tasks 1.6/1.7/1.9: minor (deferred): token soup rarely compiles (no compile-rate measure; `]` missing from SOUP); round-trip test is idempotence only; corpus test compiles but doesn't run blocks.
+Task 1.6: complete (commits 9ce1392..493c20c, review clean)
+Task 1.7: complete (commits 493c20c..2d4143f, review clean)
+Task 1.9: complete (commits 2d4143f..0d517b7, review clean)
