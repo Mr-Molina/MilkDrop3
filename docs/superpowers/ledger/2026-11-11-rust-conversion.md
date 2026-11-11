@@ -112,3 +112,8 @@ Task 1.1: Note for Task 1.2: ns-eel2's preprocessor handles `;` inside parenthes
 Task 1.1: minor (deferred → folded into Task 1.2 dispatch): `.e3` swallows identifier e3 (exponent attempted with no mantissa digits).
 Task 1.1: minor (deferred): `$x` does not mirror strtoul whitespace/sign skipping; NUL byte errors instead of terminating; unreachable defensive fallbacks uncommented.
 Task 1.1: complete (commits 00ac4c1..e13ace4, review clean)
+Task 1.2: Ruling: precedence follows ns-eel2's actual preprocessCode + bison grammar, not the plan's table — `^` LEFT-assoc (`2^3^2`=64, plan test power_is_right_associative inverted), `-2^2`=-(2^2), `a*b%c`=a*(b%c), bitwise below +/- above comparisons, comparisons one right-chaining level, &&/|| one level, `=` binds only the primary on its left, `;` in parens sequences at `*` level, `a?b` = `a?b:0`, `x[i]`=_mem(x+i), `gmem[i]`=_gmem(i); ported as src/preproc.rs, cross-checked against a Python model of the C on 190k random inputs — cost if wrong: presets relying on the plan's precedence (none known) evaluate differently.
+Task 1.2: Ruling: `(a+b)=3` is a CompileError (C silently writes a scratch slot); nesting capped (200 op / 400 parser levels) — cost if wrong: a pathological preset fails to compile instead of no-op.
+Task 1.2: Ruling (binds Task 1.3): variable names compare on their first 16 characters (NSEEL_MAX_VARIABLE_NAMELEN) — Vm::var truncates — cost if wrong: none.
+Task 1.2: Ruling (binds Task 1.4): assignment stores 0 when the value is denormal, ±Inf or NaN, mirroring asm-nseel-x86-msvc.c:575-660 — cost if wrong: presets that propagate inf would differ.
+Task 1.2: Note (Task 1.4/1.5): `^` and pow() both arrive as Call "pow". Note (Task 1.7): AST printers must fully parenthesize.
