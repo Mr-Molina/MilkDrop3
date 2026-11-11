@@ -10,3 +10,4 @@ workspace = true
 
 [dev-dependencies]
 md-testkit = { path = "../../tests/support/md-testkit" }
+proptest = { workspace = true }
