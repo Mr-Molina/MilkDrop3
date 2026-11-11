@@ -1,6 +1,9 @@
-//! Every corpus preset parses, and every non-empty code block, in the
-//! `strip_code`'d form the C++ compiles (RecompileExpressions skips empty
-//! blocks), compiles with md-eval.
+//! Corpus tests (Task 2.5; the compile check moved here from Task 2.3's
+//! `corpus_code.rs`): every corpus preset parses, and every non-empty code
+//! block, in the `strip_code`'d form the C++ compiles (RecompileExpressions
+//! skips empty blocks), compiles with md-eval.
+
+mod common;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -27,22 +30,36 @@ fn blocks(p: &Preset) -> Vec<(String, String)> {
 }
 
 #[test]
-fn corpus_presets_parse_and_code_compiles() {
-    let files = md_testkit::corpus_presets();
-    assert!(files.len() >= 30, "only {} corpus presets", files.len());
+fn every_corpus_preset_parses_without_error() {
+    let corpus = common::corpus_texts();
+    let mut failures = Vec::new();
+    for (path, text) in &corpus {
+        match parse_milk(text) {
+            // Import always leaves shader text (read or generated).
+            Ok(p) if p.warp_shader.is_empty() || p.comp_shader.is_empty() => {
+                failures.push(format!("{}: empty shader text", path.display()));
+            }
+            Ok(_) => {}
+            Err(e) => failures.push(format!("{}: {e}", path.display())),
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "{}/{} corpus presets failed:\n{}",
+        failures.len(),
+        corpus.len(),
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn corpus_presets_code_compiles() {
     let mut failures = Vec::new();
     let mut compiled = 0;
-    for path in &files {
-        let bytes = std::fs::read(path).expect("read preset");
-        let text = String::from_utf8_lossy(&bytes);
-        let preset = match parse_milk(&text) {
-            Ok(p) => p,
-            Err(e) => {
-                failures.push(format!("{}: parse: {e}", path.display()));
-                continue;
-            }
+    for (path, text) in common::corpus_texts() {
+        let Ok(preset) = parse_milk(&text) else {
+            continue; // reported by every_corpus_preset_parses_without_error
         };
-        assert!(!preset.warp_shader.is_empty() && !preset.comp_shader.is_empty());
         let mut vm = Vm::new(Rc::new(RefCell::new(GlobalMem::new())));
         for (name, code) in blocks(&preset) {
             if code.is_empty() {

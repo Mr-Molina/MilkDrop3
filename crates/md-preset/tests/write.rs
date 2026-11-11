@@ -7,6 +7,8 @@
 //!   by at most the format's rounding and nothing else, and that the result
 //!   is a fixed point of `parse . write` (see `corpus_round_trip_is_stable`).
 
+mod common;
+
 use md_preset::{parse_milk, Preset};
 
 const ALL_KEYS_EXACT: &str = include_str!("fixtures/all_keys_exact.milk");
@@ -373,11 +375,8 @@ fn snap_to(a: &Preset, b: &Preset) -> Preset {
 /// already use <= 3 decimals); (1) is its exact lossy-format analogue.
 #[test]
 fn corpus_round_trip_is_stable() {
-    let files = md_testkit::corpus_presets();
-    assert!(files.len() >= 30, "only {} corpus presets", files.len());
-    for path in &files {
-        let bytes = std::fs::read(path).expect("read");
-        let p = parse(&String::from_utf8_lossy(&bytes));
+    for (path, text) in common::corpus_texts() {
+        let p = parse(&text);
         let w = p.to_milk();
         let q = parse(&w);
         assert_eq!(snap_to(&p, &q), p, "{}: round trip changed", path.display());

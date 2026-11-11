@@ -8,6 +8,7 @@ pub mod ini;
 mod parse;
 pub mod preset;
 pub mod shape;
+pub mod transition;
 pub mod wave;
 mod write;
 
@@ -17,4 +18,5 @@ pub use ini::{strip_code, Ini};
 pub use parse::{parse_milk, ParseError};
 pub use preset::{Preset, PsVersion, MAX_CUSTOM_SHAPES, MAX_CUSTOM_WAVES};
 pub use shape::ShapeData;
+pub use transition::Transition;
 pub use wave::WaveData;

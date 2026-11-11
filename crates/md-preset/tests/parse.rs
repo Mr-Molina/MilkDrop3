@@ -46,7 +46,8 @@ fn defaults_match_cstate_default() {
     assert_eq!(p.shapes[2].border_a, 0.1); // :634
     assert_eq!(p.warp_ps_version(), PsVersion::None); // :689
     assert!(p.per_frame.is_empty() && p.warp_shader.is_empty());
-    assert_eq!(p.blendables().len(), 53);
+    assert!(!p.transition.blending); // :533
+    assert_eq!(p.transition.old_wave_mode, -1); // :566
 }
 
 #[test]

@@ -10,6 +10,7 @@
 use crate::blend::Blendable;
 use crate::preset::Preset;
 use crate::shape::ShapeData;
+use crate::transition::Transition;
 use crate::wave::WaveData;
 
 impl Default for WaveData {
@@ -165,6 +166,10 @@ impl Preset {
             // shaders
             warp_shader: String::new(), // state.cpp:688@6f7cd5d
             comp_shader: String::new(), // state.cpp:695@6f7cd5d
+
+            // m_bBlending = false (state.cpp:533@6f7cd5d), m_nOldWaveMode = -1
+            // (state.cpp:566@6f7cd5d); the rest is not set by Default().
+            transition: Transition::default(),
         }
     }
 }

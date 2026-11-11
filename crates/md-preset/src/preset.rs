@@ -12,6 +12,7 @@
 use crate::blend::Blendable;
 use crate::ini::strip_code;
 use crate::shape::ShapeData;
+use crate::transition::Transition;
 use crate::wave::WaveData;
 
 /// `MAX_CUSTOM_WAVES` (md_defines.h).
@@ -217,6 +218,10 @@ pub struct Preset {
     pub warp_shader: String,
     /// `comp_<N>` lines, or the generated default when the file has none.
     pub comp_shader: String,
+
+    /// `CState`'s preset-level blend state, set by [`Preset::start_blend`].
+    /// Not part of the file; `parse_milk` leaves it at its default.
+    pub transition: Transition,
 }
 
 /// Expands `$m!(name, field)` once per blendable field, in `CState`

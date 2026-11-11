@@ -66,6 +66,21 @@ impl Blendable {
         self.duration = duration;
     }
 
+    /// `CBlendableFloat::StartBlendFrom(f_from, time, duration)`
+    /// (state.cpp:1937-1946@6f7cd5d): keep the target, blend from `from`'s
+    /// value AT `time` (its own blend, if any, included) over `duration`
+    /// starting at `time`. Unlike [`Blendable::blend_to`] the duration is
+    /// stored as given, not recomputed as `end - start`.
+    pub fn start_blend_from(&mut self, from: &Blendable, time: f32, duration: f32) {
+        if duration < MIN_BLEND_DURATION {
+            return;
+        }
+        self.from = from.eval(time);
+        self.blending = true;
+        self.start_time = time;
+        self.duration = duration;
+    }
+
     /// `CBlendableFloat::eval`. Returns the target outside the blend window
     /// (before it starts, after it ends, or for `time < 0`), otherwise
     /// `from*(1-mix) + val*mix` with `mix = (time-start)/duration`.
@@ -168,6 +183,19 @@ mod tests {
         assert_eq!(b.eval(2.0), 10.0);
         assert_eq!(b.eval(4.0), 25.0);
         assert_eq!(b.eval(7.0), 40.0);
+    }
+
+    #[test]
+    fn start_blend_from_keeps_target_and_reads_from_at_time() {
+        let mut to = Blendable::new(20.0);
+        to.start_blend_from(&blending(), 4.0, 2.0); // blending() is 15 at t=4
+        assert_eq!(to.value(), 20.0);
+        assert_eq!(to.eval(4.0), 15.0);
+        assert_eq!(to.eval(5.0), 17.5);
+        assert_eq!(to.eval(6.5), 20.0);
+        let mut short = Blendable::new(1.0);
+        short.start_blend_from(&blending(), 4.0, 0.0009);
+        assert!(!short.is_blending());
     }
 
     #[test]
