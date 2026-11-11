@@ -320,11 +320,11 @@ Semantics are those of ns-eel2 as built in `code/ns-eel2/` with `NSEEL_REENTRANT
 - `_if(c,a,b)`, `&&`, `||`, and `? :` compile to jumps so the untaken branch is not evaluated (ns-eel2 evaluates `_if` lazily; `_and`/`_or` likewise).
 - Integer semantics: `%`, `&`, `|` convert both operands with truncation toward zero to `i32`; `%` by zero yields 0.
 
-- [ ] **Step 1:** Write failing tests `if_does_not_evaluate_untaken_branch` (`if(0, a=1, b=1)` leaves `a` at 0), `mod_by_zero_is_zero`, `bitops_truncate_operands` (`7.9 & 3.2` == 3), `loop_count_is_floored_and_capped`.
-- [ ] **Step 2:** Run `cargo test -p md-eval compiler`. Expected: FAIL.
-- [ ] **Step 3:** Implement the compiler and a stack VM `Program::run` in `vm.rs`.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(eval): bytecode compiler and VM`
+- [x] **Step 1:** Write failing tests `if_does_not_evaluate_untaken_branch` (`if(0, a=1, b=1)` leaves `a` at 0), `mod_by_zero_is_zero`, `bitops_truncate_operands` (`7.9 & 3.2` == 3), `loop_count_is_floored_and_capped`.
+- [x] **Step 2:** Run `cargo test -p md-eval compiler`. Expected: FAIL.
+- [x] **Step 3:** Implement the compiler and a stack VM `Program::run` in `vm.rs`.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(eval): bytecode compiler and VM`
 
 ### Task 1.5: Built-in functions
 
