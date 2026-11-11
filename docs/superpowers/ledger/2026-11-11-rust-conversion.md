@@ -158,3 +158,7 @@ Task 2.3: Ruling: gen_warp_shader emits `sampler_fc_main` for bTexWrap=0 — the
 Task 2.3: Ruling: version precedence follows state.cpp: MILKDROP_PRESET_VERSION > 200 → PSVERSION_WARP/PSVERSION_COMP (each default 2), PSVERSION ignored; == 200 → PSVERSION for both; < 200 (default 100) → no shaders — overrides the brief's wording — cost if wrong: none (C++ parity).
 Task 2.3: Ruling: empty warp/comp text is generated even for PS-version-0 presets (C++ Import never checks); consumers gate on the version; Task 2.4's writer emits shader text only for version >= 2 as Export does — cost if wrong: none.
 Task 2.3: Ruling: C++ fallback quirks mirrored — missing wave_r..wave_y fall back to `rot`'s default (0.0), missing mv_a falls back to legacy bMotionVectorsOn (0.0) — so parse_milk("") != Preset::defaults() — cost if wrong: none (C++ parity).
+Task 2.3: Ruling: PsVersion::from_file_value clamps 1 → Ps2_0 and 6+ → Ps4_0 (C++ asserts / compiles ps_0_0 and falls back); raw ints are kept on Preset — cost if wrong: such presets render shaders where C++ fell back.
+Task 2.3: Note (binds every consumer, M5/M7): Preset code fields hold raw ReadCode text; compile ONLY via the `*_eel()` accessors (strip_code'd form).
+Task 2.3: minor (deferred): redundant `blendables().len()==53` assert; read_code runs twice per prefix; tests/parse.rs near 600 lines (split all_keys if it grows).
+Task 2.3: complete (commits 21d9086..a16f567, review clean)
