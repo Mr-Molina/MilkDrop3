@@ -83,3 +83,5 @@ Ruling: assert `|env[0]| < 1e-6` and `env[575] < 1e-4` — the formula is not ex
 Task 0.1: dispatched (base 19f6cc9, implementer sonnet)
 Task 0.1: Ruling: `cc` appears in the build graph only as an unconditional build-dependency of winit's wayland-backend and android-activity, whose C compilation is feature-gated (`log`, `game-activity`) and disabled — Task 0.3 allow-lists cc via cargo-deny `wrappers = ["wayland-backend","android-activity"]` and the guard script additionally asserts those features stay off — cost if wrong: a C compile step could exist on Linux/Android builds.
 Task 0.1: Ruling: caret version requirements plus committed Cargo.lock satisfy "pinned" — the lockfile fixes exact versions — cost if wrong: none (switching to `=` is mechanical).
+Task 0.1: minor (deferred): workspace dep pins unverified by Cargo.lock until first use; md-audio duplicates workspace clippy lints without a mirror-me comment.
+Task 0.1: complete (commits fe1f4f4..f0545ae, review clean)

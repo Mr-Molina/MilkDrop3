@@ -218,10 +218,10 @@ Each task ends with a commit on `rust-experiment`. Commands assume the repositor
 **Interfaces:**
 - Produces: the crate names above, `[workspace.dependencies]` with exact pinned versions chosen at this step (wgpu, naga, winit, cpal, fontdue, fontdb, image, ddsfile, glam, serde, toml, hound, clap, tracing, tracing-subscriber, rand_pcg, rand_core, thiserror, anyhow, dssim-core, libpulse-binding, screencapturekit, dirs), `[workspace.lints]` with `unsafe_code = "forbid"` for every crate except `md-audio` (OS bindings).
 
-- [ ] **Step 1:** Write `Cargo.toml` with the ten members and pinned versions; each member `lib.rs` contains only `#![forbid(unsafe_code)]` (md-audio: `#![deny(unsafe_code)]`) and a doc comment naming its responsibility.
-- [ ] **Step 2:** Run `cargo build --workspace`. Expected: success with zero warnings.
-- [ ] **Step 3:** Write `NOTICE` carrying the Nullsoft 2005-2013 BSD text from `code/vis_milk2/dxcontext.h` and the Maxim Volskiy 2018 BSD text from `code/LICENSE.txt`.
-- [ ] **Step 4:** Commit: `chore: create Rust workspace skeleton`
+- [x] **Step 1:** Write `Cargo.toml` with the ten members and pinned versions; each member `lib.rs` contains only `#![forbid(unsafe_code)]` (md-audio: `#![deny(unsafe_code)]`) and a doc comment naming its responsibility.
+- [x] **Step 2:** Run `cargo build --workspace`. Expected: success with zero warnings.
+- [x] **Step 3:** Write `NOTICE` carrying the Nullsoft 2005-2013 BSD text from `code/vis_milk2/dxcontext.h` and the Maxim Volskiy 2018 BSD text from `code/LICENSE.txt`.
+- [x] **Step 4:** Commit: `chore: create Rust workspace skeleton`
 
 ### Task 0.2: Test kit and golden-image comparison
 
