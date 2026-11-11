@@ -121,3 +121,7 @@ Task 1.2: minor (deferred): signed exponents diverge from C text-scan (`x^1e-3` 
 Task 1.2: minor (deferred → Task 1.7/1.8): preprocessing is quadratic on pathological left-wrapping input (`a||`×5000 ≈1.2 s release) before the depth cap fires; bound it by counting wrap depth.
 Task 1.2: minor (deferred): `(a;.5)` accepted where C rejects; `x[0.0]` lowered to `_mem x` (same value, different AST).
 Task 1.2: complete (commits 305ff3f..9079c57, review clean)
+Task 1.3: Ruling: megabuf index = trunc-toward-zero(i + 0.00001) (x86 fistp under chop, nseel-compiler.c:233-252), not floor — the 32-bit Windows build is the reference host — cost if wrong: negative fractional indices in (-1,0) read slot 0 instead of out-of-range.
+Task 1.3: Ruling: gmegabuf is ONE flat static buffer of 1<<20 f64 with index masked by (2^20-1) (MilkDrop never calls NSEEL_VM_SetGRAM) — overrides the milestone text "sparse blocks like megabuf" — implemented as GramBuf in GlobalMem; Task 1.5 routes gmegabuf there — cost if wrong: none known.
+Task 1.3: Ruling (binds Task 1.5): `freembuf(n)` is a no-op returning n, because the MilkDrop host never calls NSEEL_VM_freeRAMIfCodeRequested; MegaBuf::free stays available but unused by the builtin — cost if wrong: presets relying on freeing memory (none observed) keep stale data.
+Task 1.3: Note: memcpy/memset use epsilon 0.0001; memcpy has memmove semantics per block and clamps at 8388608. Name truncation at 16 chars; regNN = exactly two digits.
