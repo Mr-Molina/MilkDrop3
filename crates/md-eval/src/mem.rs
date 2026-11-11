@@ -12,6 +12,8 @@
 //!   `NSEEL_SHARED_GRAM_SIZE = 1 << 20` values indexed by `w & (2^20 - 1)`.
 //!   Every index wraps (negative ones included); nothing is out of range.
 
+use crate::mt19937::Mt19937;
+
 /// Values per block (`NSEEL_RAM_ITEMSPERBLOCK`).
 pub const ITEMS_PER_BLOCK: usize = 65536;
 /// Number of blocks (`NSEEL_RAM_BLOCKS`).
@@ -229,10 +231,12 @@ impl GramBuf {
     }
 }
 
-/// State shared by every `Vm`: `reg00..reg99` and `gmegabuf`.
+/// State shared by every `Vm`: `reg00..reg99`, `gmegabuf` and the `rand` generator.
 pub struct GlobalMem {
     pub regs: [f64; 100],
     pub gmegabuf: GramBuf,
+    /// The process-wide `rand()` generator (borrow only for one draw).
+    pub rng: Mt19937,
 }
 
 impl GlobalMem {
@@ -240,6 +244,7 @@ impl GlobalMem {
         GlobalMem {
             regs: [0.0; 100],
             gmegabuf: GramBuf::default(),
+            rng: Mt19937::default(),
         }
     }
 }

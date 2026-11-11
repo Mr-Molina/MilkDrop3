@@ -8,6 +8,7 @@ pub mod compiler;
 pub mod error;
 pub mod lexer;
 pub mod mem;
+pub mod mt19937;
 pub mod parser;
 mod preproc;
 pub mod token;

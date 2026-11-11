@@ -1,7 +1,7 @@
 //! Evaluation of the built-in functions ([`Fn1`], [`Fn2`], [`Fn3`]).
 //!
 //! Semantics follow `code/ns-eel2` (x86, FPU in chop mode). Task 1.5 owns
-//! the detailed numeric tests; entries marked `TODO(1.5)` are placeholders.
+//! the detailed numeric tests live in `builtins_tests.rs`.
 
 use crate::bytecode::{Fn1, Fn2, Fn3};
 use crate::vm::{truthy_strict, Vm};
@@ -34,13 +34,45 @@ fn sign(x: f64) -> f64 {
     }
 }
 
+/// x87 `fsin` leaves an argument with |x| >= 2^63 unchanged (C2 set, no
+/// reduction); infinity is invalid and gives NaN. Smaller arguments use the
+/// platform libm (the x87's 66-bit pi reduction differs only in the last
+/// bits for |x| beyond ~1e5; not reproduced).
+fn x87_sin(x: f64) -> f64 {
+    if x.is_finite() && x.abs() >= TWO_63 {
+        x
+    } else {
+        x.sin()
+    }
+}
+
+fn x87_cos(x: f64) -> f64 {
+    if x.is_finite() && x.abs() >= TWO_63 {
+        x
+    } else {
+        x.cos()
+    }
+}
+
+/// `fptan; fstp st(0); fstp [dst]`: for |x| >= 2^63 fptan pushes nothing, so
+/// the first pop removes the operand and the second pops an empty stack,
+/// storing the masked "real indefinite" NaN.
+fn x87_tan(x: f64) -> f64 {
+    if x.is_finite() && x.abs() >= TWO_63 {
+        f64::NAN
+    } else {
+        x.tan()
+    }
+}
+
+const TWO_63: f64 = 9_223_372_036_854_775_808.0;
+
 impl Fn1 {
-    pub(crate) fn eval(self, x: f64, _vm: &mut Vm) -> f64 {
+    pub(crate) fn eval(self, x: f64, vm: &mut Vm) -> f64 {
         match self {
-            // TODO(1.5): x87 fsin/fcos/fptan return |x| >= 2^63 unchanged
-            Fn1::Sin => x.sin(),
-            Fn1::Cos => x.cos(),
-            Fn1::Tan => x.tan(),
+            Fn1::Sin => x87_sin(x),
+            Fn1::Cos => x87_cos(x),
+            Fn1::Tan => x87_tan(x),
             Fn1::Asin => x.asin(),
             Fn1::Acos => x.acos(),
             Fn1::Atan => x.atan(),
@@ -55,9 +87,8 @@ impl Fn1 {
             Fn1::Ceil => x.ceil(),
             Fn1::Sign => sign(x),
             Fn1::Invsqrt => invsqrt(x),
-            // TODO(1.5): MT19937 in GlobalMem, `genrand_int32() / 0xFFFFFFFF
-            // * max(floor(x), 1)`. 0 is inside that range.
-            Fn1::Rand => 0.0,
+            // nseel_int_rand: result in the closed interval [0, max(floor(x), 1)]
+            Fn1::Rand => vm.global.borrow_mut().rng.rand(x),
             // Ledger ruling (Task 1.3): MilkDrop never frees on request, so
             // freembuf is a no-op returning its argument.
             Fn1::Freembuf => x,
@@ -116,3 +147,7 @@ impl Fn3 {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "builtins_tests.rs"]
+mod tests;
