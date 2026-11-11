@@ -148,3 +148,5 @@ Task 1.8: minor (deferred): TOO_DEEP placeholder reports the outermost doomed op
 Task 1.8: complete (commits 68e13ed..595d7d3, review clean)
 Milestone 1: complete.
 Tasks 2.1/2.2: Ruling: batched (small, same crate); code_block returns lines joined with '\n' as ReadCode assembles them and a separate md_preset::strip_code mirrors StripLinefeedCharsAndComments — cost if wrong: none. Base fe76b50.
+Task 2.1: Ruling: .milk reads use a section-blind, case-sensitive "flat" lookup mirroring _GetLineByName (key ends at first `=` or space, values untrimmed; `code_block(prefix)` without a section, stops at 32768 bytes); a separate sectioned case-insensitive trimmed API serves milk2.ini (F49). Not mirrored: the per-file line-hint that can pick a later duplicate key, and ~125-char key truncation — cost if wrong: a preset with duplicate keys picks a different one than C++.
+Task 2.2: Note: Blendable::eval is pure (C++ clears the blending flag as a side effect); no compound-assign ops yet — add in 2.5 if needed.
