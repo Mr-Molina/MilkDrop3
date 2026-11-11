@@ -107,3 +107,5 @@ Task 0.4: minor (deferred): MD_EXTRA_PRESETS pointing at a missing dir silently 
 Task 0.4: Ruling (binds Task 2.3): the parser must reproduce StripLinefeedCharsAndComments (state.cpp:1524-1548) — line breaks between consecutive code lines are deleted with NO space inserted, and `//` and `\\` comments are stripped — tests/presets gmegabuf_share's multi-line `while(` depends on it — cost if wrong: corpus presets fail to compile.
 Task 0.4: complete (commits 05ba4c1..9b4dc39, review clean)
 Milestone 0: complete.
+Task 1.1: Ruling: lexer mirrors ns-eel2's DFA (no dots in identifiers; lone `.` = 0) but keeps `1e3` exponents as the plan requires although ns-eel2 lexes `1e3` as `1` `e3` — exponents never appear in real presets as intended exponents is the bet — cost if wrong: a preset relying on `1e3` meaning `1*e3`-style juxtaposition would differ (practically nil).
+Task 1.1: Note for Task 1.2: ns-eel2's preprocessor handles `;` inside parentheses specially (verify in nseel-compiler.c and mirror it in the parser).
