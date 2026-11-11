@@ -118,17 +118,21 @@ impl Lexer {
     fn number(b: &[u8], mut i: usize) -> (f64, usize) {
         let n = b.len();
         let start = i;
+        let mut digits = 0;
         while i < n && b[i].is_ascii_digit() {
             i += 1;
+            digits += 1;
         }
         if i < n && b[i] == b'.' {
             i += 1;
             while i < n && b[i].is_ascii_digit() {
                 i += 1;
+                digits += 1;
             }
         }
-        // Exponent only when it is complete: e[+-]digits.
-        if i < n && (b[i] == b'e' || b[i] == b'E') {
+        // Exponent only after a mantissa digit and when it is complete:
+        // e[+-]digits (so `.e3` stays `.` then `e3`).
+        if digits > 0 && i < n && (b[i] == b'e' || b[i] == b'E') {
             let mut j = i + 1;
             if j < n && (b[j] == b'+' || b[j] == b'-') {
                 j += 1;
@@ -239,6 +243,17 @@ mod tests {
             toks("2x"),
             vec![Tok::Num(2.0), Tok::Ident("x".into()), Tok::Eof]
         );
+    }
+
+    #[test]
+    fn exponent_needs_a_mantissa_digit() {
+        // `.e3` is the number `.` (0) followed by the identifier `e3`.
+        assert_eq!(
+            toks(".e3"),
+            vec![Tok::Num(0.0), Tok::Ident("e3".into()), Tok::Eof]
+        );
+        assert_eq!(num(".5e1"), 5.0);
+        assert_eq!(num("5.e1"), 50.0);
     }
 
     #[test]
