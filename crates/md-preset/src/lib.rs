@@ -9,6 +9,7 @@ mod parse;
 pub mod preset;
 pub mod shape;
 pub mod wave;
+mod write;
 
 pub use blend::Blendable;
 pub use gen_shader::{gen_comp_shader, gen_warp_shader, CompShaderParams};

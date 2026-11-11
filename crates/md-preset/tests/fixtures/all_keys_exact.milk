@@ -1,0 +1,273 @@
+MILKDROP_PRESET_VERSION=201
+PSVERSION=2
+PSVERSION_WARP=3
+PSVERSION_COMP=4
+[preset00]
+fRating=0.108
+fGammaAdj=0.115
+fDecay=0.122
+fVideoEchoZoom=0.129
+fVideoEchoAlpha=0.136
+nVideoEchoOrientation=11
+nWaveMode=12
+bAdditiveWaves=1
+bWaveDots=1
+bWaveThick=1
+bModWaveAlphaByVolume=1
+bMaximizeWaveColor=0
+bTexWrap=0
+bDarkenCenter=1
+bRedBlueStereo=1
+bBrighten=1
+bDarken=1
+bSolarize=1
+bInvert=1
+fWaveAlpha=0.143
+fWaveScale=0.151
+fWaveSmoothing=0.158
+fWaveParam=0.165
+fModWaveAlphaStart=0.172
+fModWaveAlphaEnd=0.179
+fWarpAnimSpeed=0.186
+fWarpScale=0.193
+fZoomExponent=0.200
+fShader=0.207
+zoom=0.214
+rot=0.222
+cx=0.229
+cy=0.236
+dx=0.243
+dy=0.250
+warp=0.257
+sx=0.264
+sy=0.271
+wave_r=0.278
+wave_g=0.285
+wave_b=0.293
+wave_x=0.300
+wave_y=0.307
+ob_size=0.314
+ob_r=0.321
+ob_g=0.328
+ob_b=0.335
+ob_a=0.342
+ib_size=0.349
+ib_r=0.356
+ib_g=0.364
+ib_b=0.371
+ib_a=0.378
+nMotionVectorsX=0.385
+nMotionVectorsY=0.392
+mv_dx=0.399
+mv_dy=0.406
+mv_l=0.413
+mv_r=0.420
+mv_g=0.427
+mv_b=0.435
+mv_a=0.442
+b1n=0.449
+b2n=0.456
+b3n=0.463
+b1x=0.470
+b2x=0.477
+b3x=0.484
+b1ed=0.491
+wavecode_0_enabled=13
+wavecode_0_samples=14
+wavecode_0_sep=15
+wavecode_0_bSpectrum=16
+wavecode_0_bUseDots=17
+wavecode_0_bDrawThick=18
+wavecode_0_bAdditive=19
+wavecode_0_scaling=0.498
+wavecode_0_smoothing=0.506
+wavecode_0_r=0.513
+wavecode_0_g=0.520
+wavecode_0_b=0.527
+wavecode_0_a=0.534
+wavecode_1_enabled=20
+wavecode_1_samples=21
+wavecode_1_sep=22
+wavecode_1_bSpectrum=23
+wavecode_1_bUseDots=24
+wavecode_1_bDrawThick=25
+wavecode_1_bAdditive=26
+wavecode_1_scaling=0.541
+wavecode_1_smoothing=0.548
+wavecode_1_r=0.555
+wavecode_1_g=0.562
+wavecode_1_b=0.569
+wavecode_1_a=0.577
+wavecode_2_enabled=27
+wavecode_2_samples=28
+wavecode_2_sep=29
+wavecode_2_bSpectrum=30
+wavecode_2_bUseDots=31
+wavecode_2_bDrawThick=32
+wavecode_2_bAdditive=33
+wavecode_2_scaling=0.584
+wavecode_2_smoothing=0.591
+wavecode_2_r=0.598
+wavecode_2_g=0.605
+wavecode_2_b=0.612
+wavecode_2_a=0.619
+wavecode_3_enabled=34
+wavecode_3_samples=35
+wavecode_3_sep=36
+wavecode_3_bSpectrum=37
+wavecode_3_bUseDots=38
+wavecode_3_bDrawThick=39
+wavecode_3_bAdditive=40
+wavecode_3_scaling=0.626
+wavecode_3_smoothing=0.633
+wavecode_3_r=0.640
+wavecode_3_g=0.648
+wavecode_3_b=0.655
+wavecode_3_a=0.662
+shapecode_0_enabled=41
+shapecode_0_sides=42
+shapecode_0_additive=43
+shapecode_0_thickOutline=44
+shapecode_0_textured=45
+shapecode_0_num_inst=46
+shapecode_0_x=0.669
+shapecode_0_y=0.676
+shapecode_0_rad=0.683
+shapecode_0_ang=0.690
+shapecode_0_tex_ang=0.697
+shapecode_0_tex_zoom=0.704
+shapecode_0_r=0.711
+shapecode_0_g=0.719
+shapecode_0_b=0.726
+shapecode_0_a=0.733
+shapecode_0_r2=0.740
+shapecode_0_g2=0.747
+shapecode_0_b2=0.754
+shapecode_0_a2=0.761
+shapecode_0_border_r=0.768
+shapecode_0_border_g=0.775
+shapecode_0_border_b=0.782
+shapecode_0_border_a=0.790
+shapecode_1_enabled=47
+shapecode_1_sides=48
+shapecode_1_additive=49
+shapecode_1_thickOutline=50
+shapecode_1_textured=51
+shapecode_1_num_inst=52
+shapecode_1_x=0.797
+shapecode_1_y=0.804
+shapecode_1_rad=0.811
+shapecode_1_ang=0.818
+shapecode_1_tex_ang=0.825
+shapecode_1_tex_zoom=0.832
+shapecode_1_r=0.839
+shapecode_1_g=0.846
+shapecode_1_b=0.853
+shapecode_1_a=0.861
+shapecode_1_r2=0.868
+shapecode_1_g2=0.875
+shapecode_1_b2=0.882
+shapecode_1_a2=0.889
+shapecode_1_border_r=0.896
+shapecode_1_border_g=0.903
+shapecode_1_border_b=0.910
+shapecode_1_border_a=0.917
+shapecode_2_enabled=53
+shapecode_2_sides=54
+shapecode_2_additive=55
+shapecode_2_thickOutline=56
+shapecode_2_textured=57
+shapecode_2_num_inst=58
+shapecode_2_x=0.924
+shapecode_2_y=0.932
+shapecode_2_rad=0.939
+shapecode_2_ang=0.946
+shapecode_2_tex_ang=0.953
+shapecode_2_tex_zoom=0.960
+shapecode_2_r=0.967
+shapecode_2_g=0.974
+shapecode_2_b=0.981
+shapecode_2_a=0.988
+shapecode_2_r2=0.995
+shapecode_2_g2=1.003
+shapecode_2_b2=1.010
+shapecode_2_a2=1.017
+shapecode_2_border_r=1.024
+shapecode_2_border_g=1.031
+shapecode_2_border_b=1.038
+shapecode_2_border_a=1.045
+shapecode_3_enabled=59
+shapecode_3_sides=60
+shapecode_3_additive=61
+shapecode_3_thickOutline=62
+shapecode_3_textured=63
+shapecode_3_num_inst=64
+shapecode_3_x=1.052
+shapecode_3_y=1.059
+shapecode_3_rad=1.066
+shapecode_3_ang=1.074
+shapecode_3_tex_ang=1.081
+shapecode_3_tex_zoom=1.088
+shapecode_3_r=1.095
+shapecode_3_g=1.102
+shapecode_3_b=1.109
+shapecode_3_a=1.116
+shapecode_3_r2=1.123
+shapecode_3_g2=1.130
+shapecode_3_b2=1.137
+shapecode_3_a2=1.145
+shapecode_3_border_r=1.152
+shapecode_3_border_g=1.159
+shapecode_3_border_b=1.166
+shapecode_3_border_a=1.173
+per_frame_init_1=per_frame_init_l1 = 1;
+per_frame_init_2=per_frame_init_l2 = 2;
+per_frame_1=per_frame_l1 = 1;
+per_frame_2=per_frame_l2 = 2;
+per_frame_3=per_frame_l3 = 3;
+per_pixel_1=per_pixel_l1 = 1;
+per_pixel_2=per_pixel_l2 = 2;
+wave_0_init1=wave_0_init_l1 = 1;
+wave_0_per_frame1=wave_0_per_frame_l1 = 1;
+wave_0_per_frame2=wave_0_per_frame_l2 = 2;
+wave_0_per_point1=wave_0_per_point_l1 = 1;
+wave_0_per_point2=wave_0_per_point_l2 = 2;
+wave_0_per_point3=wave_0_per_point_l3 = 3;
+wave_1_init1=wave_1_init_l1 = 1;
+wave_1_per_frame1=wave_1_per_frame_l1 = 1;
+wave_1_per_frame2=wave_1_per_frame_l2 = 2;
+wave_1_per_point1=wave_1_per_point_l1 = 1;
+wave_1_per_point2=wave_1_per_point_l2 = 2;
+wave_1_per_point3=wave_1_per_point_l3 = 3;
+wave_2_init1=wave_2_init_l1 = 1;
+wave_2_per_frame1=wave_2_per_frame_l1 = 1;
+wave_2_per_frame2=wave_2_per_frame_l2 = 2;
+wave_2_per_point1=wave_2_per_point_l1 = 1;
+wave_2_per_point2=wave_2_per_point_l2 = 2;
+wave_2_per_point3=wave_2_per_point_l3 = 3;
+wave_3_init1=wave_3_init_l1 = 1;
+wave_3_per_frame1=wave_3_per_frame_l1 = 1;
+wave_3_per_frame2=wave_3_per_frame_l2 = 2;
+wave_3_per_point1=wave_3_per_point_l1 = 1;
+wave_3_per_point2=wave_3_per_point_l2 = 2;
+wave_3_per_point3=wave_3_per_point_l3 = 3;
+shape_0_init1=shape_0_init_l1 = 1;
+shape_0_init2=shape_0_init_l2 = 2;
+shape_0_per_frame1=shape_0_per_frame_l1 = 1;
+shape_1_init1=shape_1_init_l1 = 1;
+shape_1_init2=shape_1_init_l2 = 2;
+shape_1_per_frame1=shape_1_per_frame_l1 = 1;
+shape_2_init1=shape_2_init_l1 = 1;
+shape_2_init2=shape_2_init_l2 = 2;
+shape_2_per_frame1=shape_2_per_frame_l1 = 1;
+shape_3_init1=shape_3_init_l1 = 1;
+shape_3_init2=shape_3_init_l2 = 2;
+shape_3_per_frame1=shape_3_per_frame_l1 = 1;
+warp_1=`shader_body
+warp_2=`{
+warp_3=`    ret = tex2D(sampler_main, uv).xyz * 0.5;
+warp_4=`}
+comp_1=`shader_body
+comp_2=`{
+comp_3=`    ret = 1 - tex2D(sampler_main, uv).xyz;
+comp_4=`}
