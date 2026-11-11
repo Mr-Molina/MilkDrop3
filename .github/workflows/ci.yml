@@ -15,10 +15,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      # Ubuntu only: GPU tests must run on llvmpipe and fail (not skip) without an adapter.
-      MD_REQUIRE_GPU: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
-      WGPU_ADAPTER_NAME: ${{ matrix.os == 'ubuntu-latest' && 'llvmpipe' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,6 +25,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libpulse-dev mesa-vulkan-drivers libvulkan1 pkg-config
+
+      # Linux only, so the variables are truly absent (not empty) on macOS/Windows:
+      # GPU tests must run on llvmpipe and fail (not skip) without an adapter.
+      - name: Set GPU test environment
+        if: runner.os == 'Linux'
+        run: |
+          echo "MD_REQUIRE_GPU=1" >> "$GITHUB_ENV"
+          echo "WGPU_ADAPTER_NAME=llvmpipe" >> "$GITHUB_ENV"
 
       # rustup reads rust-toolchain.toml (channel and components) and installs it.
       - name: Install toolchain from rust-toolchain.toml
