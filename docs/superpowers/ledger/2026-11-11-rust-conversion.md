@@ -93,3 +93,7 @@ Task 0.2: fix round 1/5 dispatched (Important: no analytic-value SSIM test)
 Task 0.2: fix round 1/5 (1 addressed, 0 open; commits d99f1a2..f2fe230)
 Task 0.2: minor (deferred): SSIM structure/covariance term pinned only indirectly (inverse-sign test); a non-constant analytic case would pin it exactly.
 Task 0.2: complete (commits 0e15fcd..f2fe230, review clean after 1 fix round)
+Task 0.3: minor (deferred): guard script misreads a second `cc` root line as a parent if two cc versions coexist (false failure); `printf | grep -q` under pipefail — prefer here-string.
+Task 0.3: minor (deferred): deny.toml also allows "Apache-2.0 WITH LLVM-exception" and "Unicode-DFS-2016" beyond the plan's list — Ruling: keep; both are permissive variants of allowed licenses — cost if wrong: a one-line removal.
+Task 0.3: minor (deferred): no .gitattributes yet — Windows CI checkout could CRLF the .sh guard; Task 0.4 (which creates .gitattributes) adds `*.sh text eol=lf`.
+Task 0.3: fix round 1/5 dispatched (Important: GPU env vars empty-but-set on macOS/Windows)
