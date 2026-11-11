@@ -1,0 +1,54 @@
+# Presets used for golden captures.
+#
+# - tests/golden/windows/: one-off visual references captured from the C++ build
+#   (procedure in tests/golden/windows/README.md).
+# - tests/golden/rust/: the Rust renderer's own committed baselines (Task 6.9,
+#   which extends this list to ~40 presets and adds per-entry thresholds).
+#
+# `path` is relative to tests/presets/. Values in [defaults] apply to every
+# entry unless the entry overrides them.
+
+[defaults]
+width = 640
+height = 480
+seed = 7
+frames = [1, 60, 300, 600]
+max_dssim = 0.02
+
+[[preset]]
+path = "classic/drift_tunnel.milk"
+covers = ["PSVERSION 0", "per-frame + per-pixel motion"]
+
+[[preset]]
+path = "classic/orbiting_shapes.milk"
+covers = ["PSVERSION 0", "custom shapes"]
+
+[[preset]]
+path = "ps2/blur_glow.milk"
+covers = ["PSVERSION 2", "GetBlur1", "GetBlur2"]
+max_dssim = 0.05
+
+[[preset]]
+path = "ps2/user_texture.milk"
+covers = ["PSVERSION 2", "user texture sampler_mytex", "textured shape"]
+
+[[preset]]
+path = "ps2x/blur3_bloom.milk"
+covers = ["PSVERSION 3", "GetBlur1", "GetBlur2", "GetBlur3"]
+max_dssim = 0.05
+
+[[preset]]
+path = "ps2x/tex2dbias_soft.milk"
+covers = ["PSVERSION 3", "tex2Dbias"]
+
+[[preset]]
+path = "ps2x/gmegabuf_share.milk"
+covers = ["PSVERSION 3", "custom waves", "gmegabuf", "reg00", "while"]
+
+[[preset]]
+path = "ps3/noise_volume.milk"
+covers = ["PSVERSION 4", "tex3D", "sampler_noisevol_hq"]
+
+[[preset]]
+path = "ps3/four_waves.milk"
+covers = ["PSVERSION 4", "four custom waves", "spectrum"]
