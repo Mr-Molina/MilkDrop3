@@ -147,3 +147,4 @@ Task 1.8: minor (deferred → next touch of scripts/): check-no-native-build.sh 
 Task 1.8: minor (deferred): TOO_DEEP placeholder reports the outermost doomed operator's offset (less precise error location); commit subject says "fast path" though none was needed (plan wording).
 Task 1.8: complete (commits 68e13ed..595d7d3, review clean)
 Milestone 1: complete.
+Tasks 2.1/2.2: Ruling: batched (small, same crate); code_block returns lines joined with '\n' as ReadCode assembles them and a separate md_preset::strip_code mirrors StripLinefeedCharsAndComments — cost if wrong: none. Base fe76b50.
