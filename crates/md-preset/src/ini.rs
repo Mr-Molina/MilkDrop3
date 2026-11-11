@@ -14,9 +14,11 @@
 //!   and keys match case-insensitively, whitespace around key and value is
 //!   trimmed, `;` lines are comments, the first occurrence wins.
 //!
-//! Intentional divergence from C++ (ledger ruling): a leading UTF-8 BOM is
-//! stripped. CRLF and lone `\r` line ends are accepted (as in C++), and junk
-//! lines without `=`/space are ignored.
+//! Intentional divergences from C++: a leading UTF-8 BOM is stripped (ledger
+//! ruling). A lone `\r` also ends a line -- intentional leniency: C++ reads
+//! the value with `fgets`, which splits only on `\n`, so there the text after
+//! a lone `\r` is swallowed into the previous line and never becomes a key.
+//! CRLF is accepted as in C++, and junk lines without `=`/space are ignored.
 
 use std::collections::HashMap;
 
@@ -43,7 +45,8 @@ impl Ini {
         let text = text.strip_prefix('\u{feff}').unwrap_or(text);
         let mut ini = Ini::default();
         let mut section = String::new();
-        // C++ splits lines on '\r' and '\n' alike and skips empty lines.
+        // Split on '\r' and '\n' alike and skip empty lines. (C++ only splits
+        // on '\n' after a key; treating a lone '\r' as a line end is leniency.)
         for line in text.split(['\r', '\n']).filter(|l| !l.is_empty()) {
             // Flat model: key up to the first '=' or ' ', value is the rest.
             if let Some(i) = line.find(['=', ' ']) {
@@ -136,9 +139,22 @@ impl Ini {
     /// (C++ terminates each with a control char; see [`strip_code`]).
     /// Also stops, as C++ does, when the 32768-byte buffer would overflow.
     pub fn code_block(&self, prefix: &str) -> String {
+        self.read_code(prefix).0
+    }
+
+    /// Whether `ReadCode` would read at least one line for `prefix`, i.e.
+    /// whether the C++ buffer is non-empty (`m_szWarpShadersText[0] != 0`).
+    /// Differs from `!code_block(prefix).is_empty()` for a single empty line:
+    /// C++ stores its line terminator, so `warp_1=` alone is NOT empty.
+    pub fn has_code(&self, prefix: &str) -> bool {
+        self.read_code(prefix).1 > 0
+    }
+
+    /// `ReadCode`: the joined block and the number of lines read.
+    fn read_code(&self, prefix: &str) -> (String, usize) {
         let mut out = String::new();
         let mut char_pos = 0usize;
-        let mut first = true;
+        let mut lines = 0usize;
         for n in 1.. {
             let Some(raw) = self.flat_get(&format!("{prefix}{n}")) else {
                 break;
@@ -147,14 +163,14 @@ impl Ini {
                 break;
             }
             let line = raw.strip_prefix('`').unwrap_or(raw);
-            if !first {
+            if lines > 0 {
                 out.push(LINE_SEP);
             }
-            first = false;
+            lines += 1;
             out.push_str(line);
             char_pos += line.len() + 1;
         }
-        out
+        (out, lines)
     }
 }
 
@@ -328,10 +344,36 @@ mod tests {
     }
 
     #[test]
-    fn lone_cr_ends_a_line() {
+    fn lone_cr_ends_a_line_as_intentional_leniency() {
+        // Leniency, NOT C++ parity: C++ `fgets` swallows "b=2" into the value
+        // of `a` (cut at the '\r' when read), so `b` would be missing there.
         let ini = Ini::parse("a=1\rb=2\r");
         assert_eq!(ini.flat_get("a"), Some("1"));
         assert_eq!(ini.flat_get("b"), Some("2"));
+    }
+
+    #[test]
+    fn flat_lookup_matches_whole_keys_only() {
+        let ini = Ini::parse("per_frame_10=ten\nper_frame_1x=x\nzoomexp=2\nzoom2=3\n");
+        assert_eq!(ini.flat_get("per_frame_1"), None);
+        assert_eq!(ini.flat_get("zoom"), None);
+        assert_eq!(ini.code_block("per_frame_"), "");
+        assert!(!ini.has_code("per_frame_"));
+        let ini = Ini::parse("per_frame_10=ten\nper_frame_1=one\nzoomexp=2\nzoom=1\n");
+        assert_eq!(ini.flat_get("per_frame_1"), Some("one"));
+        assert_eq!(ini.flat_get("zoom"), Some("1"));
+        assert_eq!(ini.flat_f32("zoom", 0.0), 1.0);
+        assert_eq!(ini.code_block("per_frame_"), "one");
+    }
+
+    #[test]
+    fn has_code_counts_lines_not_text() {
+        let ini = Ini::parse("warp_1=\ncomp_1=`\n");
+        assert_eq!(ini.code_block("warp_"), "");
+        assert!(ini.has_code("warp_"));
+        assert_eq!(ini.code_block("comp_"), "");
+        assert!(ini.has_code("comp_"));
+        assert!(!ini.has_code("per_pixel_"));
     }
 
     #[test]
