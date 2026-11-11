@@ -85,3 +85,4 @@ Task 0.1: Ruling: `cc` appears in the build graph only as an unconditional build
 Task 0.1: Ruling: caret version requirements plus committed Cargo.lock satisfy "pinned" — the lockfile fixes exact versions — cost if wrong: none (switching to `=` is mechanical).
 Task 0.1: minor (deferred): workspace dep pins unverified by Cargo.lock until first use; md-audio duplicates workspace clippy lints without a mirror-me comment.
 Task 0.1: complete (commits fe1f4f4..f0545ae, review clean)
+Task 0.2: Ruling: one-pixel-shift calibration test uses a noise-free smooth image (dssim 0.0041); noisy images exceed 0.01 under a sound SSIM — golden thresholds in later tasks must be tuned per pass rather than assuming 0.01 tolerates sub-pixel shifts on noisy output — cost if wrong: flaky or over-loose goldens later.
