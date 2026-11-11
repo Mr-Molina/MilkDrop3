@@ -101,6 +101,9 @@ version = "0.1.0"
 [[package]]
 name = "md-eval"
 version = "0.1.0"
+dependencies = [
+ "md-testkit",
+]
 
 [[package]]
 name = "md-hlsl"
