@@ -154,3 +154,7 @@ Tasks 2.1/2.2: minor (deferred → folded into Task 2.3): lone-CR test/doc wrong
 Tasks 2.1/2.2: minor (deferred): flat_get linear scan (O(keys×lines)); scan_i32 overflow → default; no inf/nan; sectioned API doesn't strip surrounding quotes (note for Task 8.1).
 Task 2.1: complete (commits 68e9f34..f1c3609, review clean)
 Task 2.2: complete (commits f1c3609..fcbb1a3, review clean)
+Task 2.3: Ruling: gen_warp_shader emits `sampler_fc_main` for bTexWrap=0 — the C++ passes a wide L"_fc" to a narrow %s and emits a non-compiling `sampler__main`; we emit the evident intent — cost if wrong: such presets render (with clamp sampling) where C++ fell back.
+Task 2.3: Ruling: version precedence follows state.cpp: MILKDROP_PRESET_VERSION > 200 → PSVERSION_WARP/PSVERSION_COMP (each default 2), PSVERSION ignored; == 200 → PSVERSION for both; < 200 (default 100) → no shaders — overrides the brief's wording — cost if wrong: none (C++ parity).
+Task 2.3: Ruling: empty warp/comp text is generated even for PS-version-0 presets (C++ Import never checks); consumers gate on the version; Task 2.4's writer emits shader text only for version >= 2 as Export does — cost if wrong: none.
+Task 2.3: Ruling: C++ fallback quirks mirrored — missing wave_r..wave_y fall back to `rot`'s default (0.0), missing mv_a falls back to legacy bMotionVectorsOn (0.0) — so parse_milk("") != Preset::defaults() — cost if wrong: none (C++ parity).
