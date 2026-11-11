@@ -97,3 +97,5 @@ Task 0.3: minor (deferred): guard script misreads a second `cc` root line as a p
 Task 0.3: minor (deferred): deny.toml also allows "Apache-2.0 WITH LLVM-exception" and "Unicode-DFS-2016" beyond the plan's list — Ruling: keep; both are permissive variants of allowed licenses — cost if wrong: a one-line removal.
 Task 0.3: minor (deferred): no .gitattributes yet — Windows CI checkout could CRLF the .sh guard; Task 0.4 (which creates .gitattributes) adds `*.sh text eol=lf`.
 Task 0.3: fix round 1/5 dispatched (Important: GPU env vars empty-but-set on macOS/Windows)
+Task 0.3: fix round 1/5 (1 addressed, 0 open; commits 9c22427..f4438c3)
+Task 0.3: complete (commits 0501bb5..f4438c3, review clean after 1 fix round)
