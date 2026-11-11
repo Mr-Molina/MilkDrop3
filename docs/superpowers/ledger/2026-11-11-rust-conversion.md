@@ -132,3 +132,4 @@ Task 1.4: Ruling: operand evaluation reads variables at push time, so `x + (x=5)
 Task 1.4: Note: Op set differs from the plan (no Pow — via Call2(Fn2::Pow); no Dup; And/Or carry jump targets; added Bool, Update, UpdateMem, Call3); builtins.rs exists — Task 1.5 modifies it.
 Task 1.4: minor (deferred): `here()` unchecked u32 cast; compile `err()` offset 0 for hand-built ASTs; no test pins deep loop nesting recursion bound; Fn1::eval `_vm` unused until rand (1.5).
 Task 1.4: complete (commits 5bf02cd..00edd49, review clean)
+Task 1.5: Ruling: rand(x) = genrand_int32()/0xFFFFFFFF * max(floor(x),1), closed range [0,x]; invsqrt is the 0x5f3759df estimate + one Newton step (not 1/sqrt); sin/cos return x for finite |x|>=2^63 and tan returns NaN there (x87 behaviour); transcendental functions below that use libm and may differ from x87 in the last ulp — accepted — cost if wrong: ulp-level drift in long-running feedback presets.
