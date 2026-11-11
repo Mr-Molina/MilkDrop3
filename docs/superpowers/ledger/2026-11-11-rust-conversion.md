@@ -86,3 +86,7 @@ Task 0.1: Ruling: caret version requirements plus committed Cargo.lock satisfy "
 Task 0.1: minor (deferred): workspace dep pins unverified by Cargo.lock until first use; md-audio duplicates workspace clippy lints without a mirror-me comment.
 Task 0.1: complete (commits fe1f4f4..f0545ae, review clean)
 Task 0.2: Ruling: one-pixel-shift calibration test uses a noise-free smooth image (dssim 0.0041); noisy images exceed 0.01 under a sound SSIM — golden thresholds in later tasks must be tuned per pass rather than assuming 0.01 tolerates sub-pixel shifts on noisy output — cost if wrong: flaky or over-loose goldens later.
+Task 0.2: minor (deferred): SSIM compares luma only (chroma/alpha-only changes score 0) — revisit before colour-sensitive goldens (Milestone 5/6).
+Task 0.2: minor (deferred): corrupt/unreadable golden treated as missing without surfacing the error; create_dir_all error discarded; stale .diff.png not removed on pass.
+Task 0.2: minor (deferred): FixedClock::new(0.0) unguarded; corpus walk follows symlinks (cycle risk); convoluted shift-test setup.
+Task 0.2: fix round 1/5 dispatched (Important: no analytic-value SSIM test)
