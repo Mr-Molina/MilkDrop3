@@ -254,11 +254,11 @@ Each task ends with a commit on `rust-experiment`. Commands assume the repositor
 **Files:**
 - Create: `tests/presets/README.md`, `.gitattributes` (LFS for `tests/presets/**` and `tests/golden/**`), `tests/golden/windows/README.md`
 
-- [ ] **Step 1:** Add the corpus per A.4; record its origin and license in `tests/presets/README.md`.
-- [ ] **Step 2:** Write `tests/golden/windows/README.md` describing the capture procedure for the owner: C++ build, `--wav tests/golden/test_signal.wav` is not available in C++, so capture by playing the WAV through the system and screenshotting frames 1, 60, 300, 600 for each preset in `tests/golden/manifest.toml`; the 2023 build has no seed control, so these are visual references only.
-- [ ] **Step 3:** Generate `tests/golden/test_signal.wav`: 20 seconds, 44.1 kHz stereo, a 55 Hz sine at 0.8 amplitude pulsing at 2 Hz plus a 4 kHz sine at 0.2 amplitude pulsing at 0.5 Hz, written with `hound` by `tests/support/md-testkit/examples/gen_signal.rs`.
-- [ ] **Step 4:** Run `cargo run -p md-testkit --example gen_signal` and `md-testkit::corpus_presets().len() > 0` in a test. Expected: file exists; count printed.
-- [ ] **Step 5:** Commit: `test: add preset corpus, test signal, and capture instructions`
+- [x] **Step 1:** Add the corpus per A.4; record its origin and license in `tests/presets/README.md`.
+- [x] **Step 2:** Write `tests/golden/windows/README.md` describing the capture procedure for the owner: C++ build, `--wav tests/golden/test_signal.wav` is not available in C++, so capture by playing the WAV through the system and screenshotting frames 1, 60, 300, 600 for each preset in `tests/golden/manifest.toml`; the 2023 build has no seed control, so these are visual references only.
+- [x] **Step 3:** Generate `tests/golden/test_signal.wav`: 20 seconds, 44.1 kHz stereo, a 55 Hz sine at 0.8 amplitude pulsing at 2 Hz plus a 4 kHz sine at 0.2 amplitude pulsing at 0.5 Hz, written with `hound` by `tests/support/md-testkit/examples/gen_signal.rs`.
+- [x] **Step 4:** Run `cargo run -p md-testkit --example gen_signal` and `md-testkit::corpus_presets().len() > 0` in a test. Expected: file exists; count printed.
+- [x] **Step 5:** Commit: `test: add preset corpus, test signal, and capture instructions`
 
 ## Milestone 1: `md-eval`, the expression language
 
