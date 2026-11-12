@@ -271,3 +271,5 @@ Task 5.1: minor (deferred): Win32 DT_WORD_ELLIPSIS truncates the overlong word i
 Task 5.1: fix round 1/5 (5 addressed, 0 open; commits fef9244..844958d)
 Task 5.1: minor (deferred): ellipsize `dot*3` / `w + a` unsaturated (needs ~2M glyphs); weak zero-rect assertion.
 Task 5.1: complete (commits 08934b1..98d8a7d + fix 844958d, review clean after 1 fix round)
+Task 5.2: Ruling: VsParams/BlurUniforms serializers in md-render uniforms.rs (blur values filled in 6.1); Vertex::color_from_d3dcolor(u32) → RGBA; mip-blit WGSL inline in mips.rs (naga unit test); Texture3d mips built on CPU; DynamicVertexBuffer grows to max(2×cap, needed) on overflow; new_target/from_rgba8 take `mips: bool`; extra files bytes.rs/dynbuf.rs/mips.rs/readback.rs; headless_device returns None when WGPU_ADAPTER_NAME matches nothing (fails under MD_REQUIRE_GPU=1) — cost if wrong: none.
+Task 5.2: Note: odd-size mip levels use bilinear rather than exact 2×2 box (D3D autogen behaviour unknown) — goldens decide.
