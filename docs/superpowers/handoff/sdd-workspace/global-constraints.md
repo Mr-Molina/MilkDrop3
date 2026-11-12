@@ -1,0 +1,10 @@
+## Global Constraints
+
+- **No C or C++ source in the repository at the end of milestone 9.** `code/` is deleted. Crates that bind operating-system libraries (ALSA, PulseAudio, CoreAudio, WASAPI, X11, Wayland) are allowed because no foreign source enters the tree; crates that vendor and compile C or C++ (`*-sys` crates with a bundled source tree, `cc`-built dependencies) are forbidden. Enforce with `cargo deny` and a `cargo tree` check in CI (Task 0.3).
+- **Source baseline is the 2023 `code/` snapshot** (MilkDrop 2.25c plus BeatDrop changes). Limits carried over exactly: `MAX_CUSTOM_WAVES = 4`, `MAX_CUSTOM_SHAPES = 4`, `NUM_Q_VAR = 32`, `NUM_WAVEFORM_SAMPLES = 480`, `NUM_FREQUENCIES = 512`, `SAMPLE_SIZE = 576`, `NUM_BLUR_TEX = 6`, `MAX_BIGSTRING_LEN = 32768`, default mesh `64 x 64`, default `fTimeBetweenPresets = 16.0`, `fTimeBetweenPresetsRand = 10.0`, `fBlendTimeAuto = 2.7`, `fBlendTimeUser = 1.7`, `fHardCutLoudnessThresh = 2.5`, `fHardCutHalflife = 60.0`, `max_fps = 60`. The 3.x features in the README are out of scope until the maintainer publishes that source; the crate boundaries leave room for them.
+- **Preset compatibility is the product.** Every `.milk` file the C++ parses must parse; every expression it compiles must compile; every shader it compiles must translate and validate under naga. Corpus tests enforce this (Tasks 2.5, 1.9, 4.9).
+- **Determinism for tests.** All randomness goes through `rand_pcg::Pcg32` seeded from a `u64`; no `rand::thread_rng()` outside `apps/`. Frame time in tests comes from a fixed-step clock.
+- **Strings are UTF-8 `String`/`&str`; paths are `std::path::PathBuf`.** No `wchar_t` equivalents, no `MAX_PATH`.
+- **Identifiers in the expression language are case-insensitive**, as in ns-eel2.
+- **Rendering target is wgpu with WGSL only.** No GLSL, no SPIR-V passthrough, no HLSL at runtime except as translator input.
+- **Licensing:** the result stays BSD 3-Clause; keep the Nullsoft and Maxim Volskiy notices in `NOTICE`. Every dependency must be MIT, Apache-2.0, BSD, Zlib, ISC, MPL-2.0, or Unicode licensed; `cargo deny` blocks anything else.

@@ -311,3 +311,5 @@ Task 5.7: minor (deferred): RenderSettings.tex_w/tex_h mean window as input and 
 Task 5.7: fix round 1/5 (5 addressed, 0 open; commits 3e5aa9c..ffd2049)
 Task 5.7: minor (deferred): sRGB-target panic untested; tests/frame.rs at 605 lines.
 Task 5.7: complete (commits cefb523..9c31a9d + fix ffd2049, review clean after 1 fix round)
+Task 5.8: interrupted — implementer stopped by a usage limit before writing any files; nothing on disk. Restart it fresh.
+Controller: HAND-OFF at 2026-11-12 17:25 UTC per owner instruction — see docs/superpowers/handoff/HANDOFF.md; SDD workspace snapshot (minus diffs) at docs/superpowers/handoff/sdd-workspace/; hourly resume trigger trig_01FM3pmj24AwEMGRxXwKaV7q DISABLED so it cannot race the new agent.

@@ -1,0 +1,13 @@
+### Task 1.9: Corpus compile test
+
+**Files:**
+- Create: `crates/md-eval/tests/corpus.rs`
+
+- [ ] **Step 1:** Write test `every_corpus_expression_compiles`: for each preset in `md_testkit::corpus_presets()`, extract the raw text of keys `per_frame_init_N`, `per_frame_N`, `per_pixel_N`, `wave_I_init_N`, `wave_I_per_frame_N`, `wave_I_per_point_N`, `shape_I_init_N`, `shape_I_per_frame_N` (a minimal regex scan, since `md-preset` does not exist yet), join lines with `\n`, and assert `Program::compile` succeeds; print the failing preset path and `CompileError` otherwise.
+- [ ] **Step 2:** Run `cargo test -p md-eval --test corpus`. Expected: PASS for 100% of presets. Each failure is a language-feature bug to fix in Tasks 1.1-1.5 before this task is closed.
+- [ ] **Step 3:** Commit: `test(eval): compile every corpus expression`
+
+## Milestone 2: `md-preset`, the preset model
+
+The `.milk` format is an INI file with a single `[preset00]` section, scalar keys, and numbered code lines. Keys pinned from `state.cpp`: scalars `MILKDROP_PRESET_VERSION`, `PSVERSION`, `PSVERSION_WARP`, `PSVERSION_COMP`, `fRating`, `fGammaAdj`, `fDecay`, `fVideoEchoZoom`, `fVideoEchoAlpha`, `nVideoEchoOrientation`, `nWaveMode`, `bAdditiveWaves`, `bWaveDots`, `bWaveThick`, `bModWaveAlphaByVolume`, `bMaximizeWaveColor`, `bTexWrap`, `bDarkenCenter`, `bRedBlueStereo`, `bBrighten`, `bDarken`, `bSolarize`, `bInvert`, `fWaveAlpha`, `fWaveScale`, `fWaveSmoothing`, `fWaveParam`, `fModWaveAlphaStart`, `fModWaveAlphaEnd`, `fWarpAnimSpeed`, `fWarpScale`, `fZoomExponent`, `fShader`, `zoom`, `rot`, `cx`, `cy`, `dx`, `dy`, `warp`, `sx`, `sy`, `wave_r`, `wave_g`, `wave_b`, `wave_x`, `wave_y`, `ob_size`, `ob_r`, `ob_g`, `ob_b`, `ob_a`, `ib_size`, `ib_r`, `ib_g`, `ib_b`, `ib_a`, `nMotionVectorsX`, `nMotionVectorsY`, `mv_dx`, `mv_dy`, `mv_l`, `mv_r`, `mv_g`, `mv_b`, `mv_a`, `b1n`, `b2n`, `b3n`, `b1x`, `b2x`, `b3x`, `b1ed`; per wave `i` in 0..4 with prefix `wavecode_i_`: `enabled`, `samples`, `sep`, `bSpectrum`, `bUseDots`, `bDrawThick`, `bAdditive`, `scaling`, `smoothing`, `r`, `g`, `b`, `a`; per shape `i` in 0..4 with prefix `shapecode_i_`: `enabled`, `sides`, `additive`, `thickOutline`, `textured`, `num_inst`, `x`, `y`, `rad`, `ang`, `tex_ang`, `tex_zoom`, `r`, `g`, `b`, `a`, `r2`, `g2`, `b2`, `a2`, `border_r`, `border_g`, `border_b`, `border_a`; code blocks numbered from 1 with prefixes `per_frame_init_`, `per_frame_`, `per_pixel_`, `wave_i_init`, `wave_i_per_frame`, `wave_i_per_point`, `shape_i_init`, `shape_i_per_frame`, `warp_`, `comp_`. A line beginning with a backtick has the backtick stripped. Defaults are those `CState::Default()` sets; the implementer reads them from `code/vis_milk2/state.cpp` and records each in `defaults.rs` with the C++ line number in a comment.
+
