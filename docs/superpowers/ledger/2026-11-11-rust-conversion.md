@@ -262,3 +262,4 @@ Tasks 4.9/4.10: minor (deferred): const-eval guard tests assert WGSL text, not r
 Task 4.9: complete (commits fb9ce2b..cb792aa + 6fd10cf, review clean)
 Task 4.10: complete (commit e960afc, review clean)
 Milestone 4: complete.
+Controller: installed mesa-vulkan-drivers in this container (lavapipe ICD at /usr/share/vulkan/icd.d/lvp_icd.json) so Milestone 5+ GPU tests can run headless; reinstall after a container reset (apt-get install -y mesa-vulkan-drivers libpulse-dev).
