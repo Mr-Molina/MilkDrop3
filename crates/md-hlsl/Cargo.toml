@@ -7,3 +7,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+md-preset = { path = "../md-preset" }
+md-testkit = { path = "../../tests/support/md-testkit" }

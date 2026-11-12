@@ -456,6 +456,10 @@ dependencies = [
 [[package]]
 name = "md-hlsl"
 version = "0.1.0"
+dependencies = [
+ "md-preset",
+ "md-testkit",
+]
 
 [[package]]
 name = "md-platform"
