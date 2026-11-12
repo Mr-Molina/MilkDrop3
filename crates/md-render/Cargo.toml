@@ -11,6 +11,11 @@ workspace = true
 [dependencies]
 wgpu.workspace = true
 md-hlsl = { path = "../md-hlsl" }
+image.workspace = true
+ddsfile.workspace = true
+rand_pcg.workspace = true
+rand_core.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 naga = { workspace = true, features = ["wgsl-in"] }

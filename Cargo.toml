@@ -32,7 +32,7 @@ winit = "0.30.13"
 cpal = "0.18.2"
 fontdue = "0.9.5"
 fontdb = "0.24.0"
-image = { version = "0.25.10", default-features = false, features = ["png"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "tga", "bmp"] }
 ddsfile = "0.6.0"
 glam = "0.34.3"
 serde = { version = "1.0.229", features = ["derive"] }
