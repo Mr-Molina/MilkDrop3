@@ -7,3 +7,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+fontdue.workspace = true
+fontdb.workspace = true

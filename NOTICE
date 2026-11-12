@@ -58,3 +58,12 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Liberation Sans Regular (bundled fallback font, assets/fonts/LiberationSans-Regular.ttf)
+-----
+Digitized data copyright (c) 2010 Google Corporation with Reserved Font Arimo,
+Tinos and Cousine. Copyright (c) 2012 Red Hat, Inc. with Reserved Font Name
+Liberation. Version 2.1.5, licensed under the SIL Open Font License, Version 1.1
+(full text in assets/fonts/LICENSE-LiberationSans.txt). The font file is embedded
+unmodified; it is the only non-MIT/Apache/BSD/Zlib/ISC/MPL/Unicode licensed
+component and is an asset, not a Cargo dependency.
