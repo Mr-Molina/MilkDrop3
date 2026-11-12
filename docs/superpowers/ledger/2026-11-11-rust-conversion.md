@@ -263,3 +263,5 @@ Task 4.9: complete (commits fb9ce2b..cb792aa + 6fd10cf, review clean)
 Task 4.10: complete (commit e960afc, review clean)
 Milestone 4: complete.
 Controller: installed mesa-vulkan-drivers in this container (lavapipe ICD at /usr/share/vulkan/icd.d/lvp_icd.json) so Milestone 5+ GPU tests can run headless; reinstall after a container reset (apt-get install -y mesa-vulkan-drivers libpulse-dev).
+Task 5.1: Ruling: deny.toml ignores advisory RUSTSEC-2026-0192 (ttf-parser unmaintained — informational, via fontdue 0.9.5), documented in deny.toml — cost if wrong: an unmaintained transitive parser stays in the graph; revisit when fontdue updates.
+Task 5.1: Ruling: bundled fallback font is Liberation Sans Regular 2.1.5 (OFL, 410 KB) with license in assets/fonts/ and NOTICE; TextFlags gains end_ellipsis (DT_END_ELLIPSIS used by menu.cpp/plugin.cpp); glyph-quad UVs valid only for the current Atlas::generation(); full atlas at 2048 evicts and re-rasterizes, unfit glyphs drop to blank advance — cost if wrong: rare text glitches.
