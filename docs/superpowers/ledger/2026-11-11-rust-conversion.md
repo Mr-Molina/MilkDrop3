@@ -194,3 +194,7 @@ Task 3.5: Ruling: Windows uses cpal 0.18.2 (its WASAPI host sets the loopback fl
 Task 3.5: Note (owner verification): run the #[ignore]d capture tests once on a Mac (CoreMedia non-interleaved layout assumption; possible CoreGraphics connection need) and on Windows.
 Task 3.5: fix round 1/5 dispatched (Important: SCStream dropped unstopped when open completes after the 10 s timeout → UAF risk). Ruling: minors 2-4,6 folded in (planar length check, frames==0 early return, cross-thread SAFETY comments, render-only WASAPI name lookup — the last is a functional bug that could record the microphone).
 Task 3.5: minor (deferred): work under mutex in WASAPI realtime callback; U8/U16/I24/F64 mix formats rejected (undocumented); eprintln! in library code; per-call Vec allocs in capture_ring next_frame and Pulse decode; ledger said 8 unsafe allows, actual 7.
+Task 3.5: fix round 1/5 (5 addressed, 0 open; commits eeadf7d..5937cc6)
+Task 3.5: minor (deferred): start-timeout edge — if Capture::drop's stop is rejected while startCapture is pending and the start then completes, the stream may keep running (send a stop from the start completion handler when the caller has given up); a never-called stop handler leaks two Retained handles.
+Task 3.5: complete (commits 3121be7..ad9be3b + fix 5937cc6, review clean after 1 fix round)
+Milestone 3: complete. Owner verification pending: real capture on Linux desktop, Windows, macOS (#[ignore]d tests + `cargo run -p md-audio --example list_devices`).
