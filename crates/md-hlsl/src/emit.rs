@@ -290,9 +290,20 @@ fn global<'a>(
 /// and operators over them (no calls, no matrices or structs, no division,
 /// remainder or shifts, which could fail const evaluation).
 fn is_const_expr(e: &TExpr, consts: &HashSet<&str>) -> bool {
+    const_expr(e, consts, false)
+}
+
+/// True if naga could const-evaluate `e` once emitted — [`is_const_expr`]
+/// with every binary operator allowed. Calls are excluded (naga folds some
+/// builtins too; a right operand that is such a call is not guarded).
+pub(crate) fn naga_const(e: &TExpr, consts: &HashSet<&str>) -> bool {
+    const_expr(e, consts, true)
+}
+
+fn const_expr(e: &TExpr, consts: &HashSet<&str>, any_op: bool) -> bool {
     use crate::ast::{BinOp, UnOp};
     use TExprKind as K;
-    let c = |x: &TExpr| is_const_expr(x, consts);
+    let c = |x: &TExpr| const_expr(x, consts, any_op);
     if matches!(e.ty, Ty::Mat(..) | Ty::Struct(_)) {
         return false;
     }
@@ -309,7 +320,9 @@ fn is_const_expr(e: &TExpr, consts: &HashSet<&str>) -> bool {
             matches!(op, UnOp::Neg | UnOp::Plus | UnOp::Not | UnOp::BitNot) && c(operand)
         }
         K::Binary { op, lhs, rhs } => {
-            !matches!(op, BinOp::Div | BinOp::Rem | BinOp::Shl | BinOp::Shr) && c(lhs) && c(rhs)
+            (any_op || !matches!(op, BinOp::Div | BinOp::Rem | BinOp::Shl | BinOp::Shr))
+                && c(lhs)
+                && c(rhs)
         }
         _ => false,
     }

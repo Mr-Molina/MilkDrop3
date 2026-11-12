@@ -15,8 +15,10 @@
 //! - `+ - * / %` map to WGSL operators; float `%` (HLSL `fmod`) is WGSL `%`,
 //!   which the WGSL spec defines as `e1 - e2 * trunc(e1 / e2)`; `*`, `/`,
 //!   `%` between matrices are componentwise in HLSL and are spelled per
-//!   column; a divisor that is a literal zero goes through a `var` so the
-//!   division is not const-evaluated (a WGSL shader-creation error);
+//!   column; a right operand whose constant evaluation could fail (a
+//!   constant zero divisor, a shift amount of 32 or more, ...) goes
+//!   through a `var` so the operation is not const-evaluated (a WGSL
+//!   shader-creation error) — see [`Fx::guard_rhs`] for the values;
 //! - shifts convert the amount to `u32`; `&&`/`||` stay `&&`/`||` on
 //!   scalars (their operands' side effects are hoisted, so both are always
 //!   evaluated, as fxc does) and become `&`/`|` on `bool` vectors;
@@ -57,6 +59,16 @@ pub(crate) fn is_lit(e: &TExpr) -> bool {
         TExprKind::Lit(_) => true,
         TExprKind::Cast(x) | TExprKind::Splat(x) => is_lit(x),
         _ => false,
+    }
+}
+
+/// The value of an integer (or bool) literal, possibly converted.
+fn int_lit(e: &TExpr) -> Option<i64> {
+    match &e.kind {
+        TExprKind::Lit(Lit::Int(v)) => Some(*v),
+        TExprKind::Lit(Lit::Bool(b)) => Some(i64::from(*b)),
+        TExprKind::Cast(x) | TExprKind::Splat(x) => int_lit(x),
+        _ => None,
     }
 }
 
@@ -205,9 +217,52 @@ impl Fx<'_, '_> {
         Ok(out)
     }
 
-    /// A zero-literal divisor, moved into a `var` (not const-evaluated).
-    pub fn divisor(&mut self, op: BinOp, rhs: &TExpr, s: String) -> R<String> {
-        if !matches!(op, BinOp::Div | BinOp::Rem) || !is_zero_lit(rhs) {
+    /// Guard the right operand `s` of `op` against WGSL constant
+    /// evaluation: when naga would fold the operation (or check it in the
+    /// validator) and the fold could fail, the operand is moved into a
+    /// `var`, so the operation happens at run time under WGSL's runtime
+    /// rules. fxc folded these with a warning; the results are:
+    ///
+    /// - integer `/`, `%` whose divisor is a constant other than a literal
+    ///   outside {0, -1} (`5 / N` with `static const int N = 0`,
+    ///   `INT_MIN / -1`): WGSL runtime `x / 0 = x`, `x % 0 = 0`,
+    ///   `INT_MIN / -1 = INT_MIN`, `INT_MIN % -1 = 0`. The SM2/3 targets did
+    ///   integer math in float (`5 / 0` = +inf, cast back to int), which is
+    ///   not reproducible exactly here (the cast of inf is undefined);
+    /// - float `/`, `%` (`fmod`) whose divisor is a literal zero or a
+    ///   non-literal constant: IEEE `±inf`/NaN at run time, as the SM2/3
+    ///   float hardware produced, instead of naga's "literal is infinite";
+    /// - shifts whose amount is a constant other than a literal in 0..32, or
+    ///   whose left operand is also constant (`3 << 31` overflows naga's
+    ///   signed constant shift): WGSL runtime shifts take the amount modulo
+    ///   32 (`1 << 40` = 256, `1 << -1` = `1 << 31`) and discard the bits
+    ///   shifted out — what x86 `shl`/`sar` (count masked to 5 bits) gave a
+    ///   C-style folder; fxc's own folded value is not verifiable here.
+    ///
+    /// `lhs` is `None` when the left operand is a runtime place (compound
+    /// assignment).
+    pub fn guard_rhs(
+        &mut self,
+        op: BinOp,
+        lhs: Option<&TExpr>,
+        rhs: &TExpr,
+        s: String,
+    ) -> R<String> {
+        let konst = |e: &TExpr| crate::emit::naga_const(e, &self.cx.consts);
+        let int = rhs.ty.elem() != Some(Scalar::Float);
+        let guard = match op {
+            BinOp::Div | BinOp::Rem if int => {
+                konst(rhs) && !int_lit(rhs).is_some_and(|v| v != 0 && v != -1)
+            }
+            BinOp::Div | BinOp::Rem => is_zero_lit(rhs) || (konst(rhs) && !is_lit(rhs)),
+            BinOp::Shl | BinOp::Shr => {
+                konst(rhs)
+                    && (lhs.is_some_and(konst)
+                        || !int_lit(rhs).is_some_and(|v| (0..32).contains(&v)))
+            }
+            _ => false,
+        };
+        if !guard {
             return Ok(s);
         }
         let t = self.fresh();
@@ -220,7 +275,7 @@ impl Fx<'_, '_> {
     fn binary(&mut self, e: &TExpr, op: BinOp, lhs: &TExpr, rhs: &TExpr) -> R<String> {
         let mut v = self.operands(&[lhs, rhs])?;
         let b = v.pop().unwrap();
-        let b = self.divisor(op, rhs, b)?;
+        let b = self.guard_rhs(op, Some(lhs), rhs, b)?;
         let a = v.pop().unwrap();
         self.binop(op, a, b, &lhs.ty, e.pos)
     }

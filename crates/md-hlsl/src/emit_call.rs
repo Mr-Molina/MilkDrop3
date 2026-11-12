@@ -198,7 +198,7 @@ impl Fx<'_, '_> {
                 _ => format!("clamp({}, 0.0, 1.0)", a(0)),
             },
             I::Fmod => {
-                let b = self.divisor(crate::ast::BinOp::Rem, &args[1], v[1].clone())?;
+                let b = self.guard_rhs(crate::ast::BinOp::Rem, None, &args[1], v[1].clone())?;
                 format!("({} % {b})", a(0))
             }
             I::Log10 => format!("(log({}) / log(10.0))", a(0)),

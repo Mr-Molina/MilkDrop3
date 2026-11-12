@@ -154,7 +154,7 @@ impl Fx<'_, '_> {
         match op {
             None => self.write(&p, r),
             Some(op) => {
-                let r = self.divisor(*op, rhs, r)?;
+                let r = self.guard_rhs(*op, None, rhs, r)?;
                 let lt = &lhs.ty;
                 let native = p.single()
                     && op_ty == lt
