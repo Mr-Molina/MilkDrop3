@@ -86,14 +86,49 @@ fn comp_uv_orig_aliases_uv() {
 }
 
 #[test]
-fn apply_fixups_strips_line_comments_like_strip_comments() {
+fn apply_fixups_strips_comments_like_strip_comments() {
     let src = "a; // x \\\nb; /* // not a line comment */ c;\n/* multi\n// inside */ d; // e\n";
-    assert_eq!(
-        apply_fixups(src),
-        "a; \nb; /* // not a line comment */ c;\n/* multi\n// inside */ d; \n"
-    );
+    // Block comments are removed too (StripComments removes both kinds);
+    // the newline inside the multi-line comment is moved to the end of the
+    // line the comment ends on, so line 4 stays line 4.
+    assert_eq!(apply_fixups(src), "a; \nb;  c;\n d; \n\n");
     // line count (and so every error line) is preserved
     let body = fixture("line_comment_backslash.hlsl");
     assert_eq!(apply_fixups(&body).lines().count(), body.lines().count());
     assert_eq!(apply_fixups("x;\r\n// c\r\ny;"), "x;\r\n\r\ny;");
+}
+
+/// plugin.cpp:1342 `StripComments` slides a two-character window one
+/// character at a time, so `/*/` is a complete block comment (the `*` is
+/// shared) and the `/` closing `*//` also opens a `//` line comment.
+#[test]
+fn strip_comments_shared_character_edge_cases() {
+    assert_eq!(apply_fixups("a /*/ b */ c"), "a  b */ c");
+    assert_eq!(apply_fixups("x = 1 /* c *// 2;\ny;"), "x = 1 \ny;");
+    assert_eq!(apply_fixups("x = 1 /* c */ / 2;"), "x = 1  / 2;");
+    // `//*` is a line comment; the `*/` on the next line is plain text
+    assert_eq!(apply_fixups("a //* x\nb */ c"), "a \nb */ c");
+    // `/**/` and `/***/` are complete comments
+    assert_eq!(apply_fixups("p/**/q /***/r"), "pq r");
+}
+
+/// Removing a block comment joins the text around it, as in the C++
+/// (`a/**/b` is `ab`); the newlines a comment spans are re-emitted at the
+/// end of the line it ends on, so later lines keep their numbers.
+#[test]
+fn strip_comments_keeps_the_line_count() {
+    assert_eq!(apply_fixups("a/*\n*/b;\nc;"), "ab;\n\nc;");
+    assert_eq!(apply_fixups("a/*\r\n\r\n*/b"), "ab\r\n\r\n");
+    assert_eq!(apply_fixups("a; /* never closed\nb;\n"), "a; \n\n");
+    assert_eq!(apply_fixups("/"), "/");
+    assert_eq!(apply_fixups(""), "");
+    let body = "shader_body {\n/* one\n two */ ret = 1;\n  ret = q; // x\n}";
+    let e = translate(&ShaderInput {
+        kind: ShaderKind::Warp,
+        body,
+        preamble: &common::asset("include.fx"),
+        ps_version: PsVersion::Ps2_0,
+    })
+    .unwrap_err();
+    assert_eq!((e.line, e.message.as_str()), (4, "unknown identifier 'q'"));
 }
