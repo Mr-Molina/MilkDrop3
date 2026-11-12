@@ -216,3 +216,7 @@ Task 4.2: Ruling: the missing-`;`-before-`}` tolerance is lenient beyond the C++
 Task 4.2: minor (deferred): >127 else-if arms → TranslateError (each arm one depth level); annotation skipping doesn't handle string tokens or `>>` inside `<…>`.
 Task 4.2: Note (binds Task 4.3): `a = b ? c : d = e` parses as Assign with a Ternary lhs — 4.3 must reject non-lvalue assignment targets.
 Task 4.2: complete (commits d00e1e4..3ede38d, review clean)
+Task 4.3: Ruling: TypedModule is a typed mirror of the AST in typed.rs (TExpr{pos,ty,kind} with resolved vars/callees and explicit Cast/Splat/Swizzle-truncation); ast::Expr::Splat added per F26 and accepted as input — cost if wrong: none.
+Task 4.3: Ruling: rejected with errors (unverifiable against fxc here): vector `if` conditions, `float(v3)`/`float3(v4)` constructors, vector↔matrix conversions; a body redeclaring a preamble global is a redefinition error (as fxc) — cost if wrong: some real-world presets fail to translate; revisit via MD_EXTRA_PRESETS corpus run (Task 4.9 triage).
+Task 4.3: Note (binds Task 4.4): emit straddling matrix-ctor args, componentwise matrix `*`, matrix Splat, matrix→smaller-matrix Cast, vector-condition `?:` → select, swizzle writes, writes to `in` params, `sign` typed int, overload names `name__ovl<k>`; texCUBE → TranslateError at emit.
+Task 4.3: Note (binds Task 4.5): untyped `sampler` dimension inferred from use (tex3D/tex3Dlod → 3D, texCUBE → cube, else 2D; unused name containing `noisevol` → 3D), recorded in TGlobal.ty; unreferenced preamble samplers still appear as TGlobals.
