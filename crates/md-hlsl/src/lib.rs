@@ -13,5 +13,5 @@ mod version;
 pub use error::TranslateError;
 pub use lexer::tokenize;
 pub use preprocess::{preprocess, preprocess_tokens};
-pub use token::{TokKind, Token};
+pub use token::{TokKind, Token, MAX_TOKEN_LEN};
 pub use version::PsVersion;

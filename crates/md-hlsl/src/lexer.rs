@@ -4,7 +4,7 @@
 //! preprocessor and lexer report original line/col even after comments and
 //! `\`-newline joins have been removed.
 
-use crate::token::{TokKind, Token};
+use crate::token::{TokKind, Token, MAX_TOKEN_LEN};
 use crate::TranslateError;
 
 /// A source character with its original 1-based position.
@@ -134,7 +134,13 @@ pub(crate) fn lex(chars: &[Ch]) -> Result<Vec<Token>, TranslateError> {
             while j < chars.len() && is_ident_char(chars[j].c) {
                 j += 1;
             }
-            (TokKind::Ident(spelled(chars, i, j - i)), j - i)
+            if j - i > MAX_TOKEN_LEN {
+                return Err(err_at(
+                    &ch,
+                    format!("identifier too long (max {MAX_TOKEN_LEN} characters)"),
+                ));
+            }
+            (TokKind::Ident(spelled(chars, i, j - i).into()), j - i)
         } else if c.is_ascii_digit()
             || (c == '.' && chars.get(i + 1).is_some_and(|n| n.c.is_ascii_digit()))
         {
@@ -175,6 +181,18 @@ fn match_op(chars: &[Ch], i: usize) -> Option<&'static str> {
 fn lex_number(chars: &[Ch], start: usize) -> Result<(TokKind, usize), TranslateError> {
     let at = chars[start];
     let peek = |j: usize| chars.get(j).map(|c| c.c);
+    // Checked before any parse so an overlong literal reports its length,
+    // not a range error.
+    let too_long = |end: usize| {
+        if end - start > MAX_TOKEN_LEN {
+            Err(err_at(
+                &at,
+                format!("numeric literal too long (max {MAX_TOKEN_LEN} characters)"),
+            ))
+        } else {
+            Ok(())
+        }
+    };
     let mut j = start;
     // Hexadecimal integer.
     if peek(j) == Some('0') && matches!(peek(j + 1), Some('x' | 'X')) {
@@ -183,6 +201,7 @@ fn lex_number(chars: &[Ch], start: usize) -> Result<(TokKind, usize), TranslateE
         while peek(j).is_some_and(|c| c.is_ascii_hexdigit()) {
             j += 1;
         }
+        too_long(j)?;
         let digits = spelled(chars, ds, j - ds);
         if digits.is_empty() {
             return Err(err_at(&at, "invalid hexadecimal literal"));
@@ -217,6 +236,7 @@ fn lex_number(chars: &[Ch], start: usize) -> Result<(TokKind, usize), TranslateE
             j = k;
         }
     }
+    too_long(j)?;
     let text = spelled(chars, start, j - start);
     if is_float {
         let v: f64 = text

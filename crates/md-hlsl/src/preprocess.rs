@@ -23,13 +23,19 @@
 use std::collections::HashMap;
 
 use crate::lexer::{clean, lex, Ch};
-use crate::token::{TokKind, Token};
+use crate::token::{TokKind, Token, MAX_TOKEN_LEN};
 use crate::TranslateError;
 
 struct Macro {
-    /// `None` for object-like macros.
-    params: Option<Vec<String>>,
+    /// `None` for object-like macros. Maps each parameter name to its index
+    /// (the first occurrence wins), so substitution is O(1) per body token.
+    params: Option<Params>,
     body: Vec<Token>,
+}
+
+struct Params {
+    count: usize,
+    index: HashMap<String, usize>,
 }
 
 type Macros = HashMap<String, Macro>;
@@ -93,15 +99,24 @@ fn flush(
     Ok(())
 }
 
-fn ident_at(line: &[Ch], mut i: usize) -> Option<(String, usize)> {
+/// The identifier starting at `i` and the index after it; `Ok(None)` if there
+/// is none. Directive names and parameters obey the lexer's length cap too.
+fn ident_at(line: &[Ch], mut i: usize) -> Result<Option<(String, usize)>, TranslateError> {
     let start = i;
     while i < line.len() && (line[i].c.is_ascii_alphanumeric() || line[i].c == '_') {
         i += 1;
     }
     if i == start || line[start].c.is_ascii_digit() {
-        return None;
+        return Ok(None);
     }
-    Some((line[start..i].iter().map(|c| c.c).collect(), i))
+    if i - start > MAX_TOKEN_LEN {
+        return Err(TranslateError::new(
+            line[start].line,
+            line[start].col,
+            format!("identifier too long (max {MAX_TOKEN_LEN} characters)"),
+        ));
+    }
+    Ok(Some((line[start..i].iter().map(|c| c.c).collect(), i)))
 }
 
 fn skip_ws(line: &[Ch], mut i: usize) -> usize {
@@ -118,7 +133,7 @@ fn directive(line: &[Ch], macros: &mut Macros) -> Result<(), TranslateError> {
     if i >= line.len() {
         return Ok(()); // null directive
     }
-    let Some((name, after)) = ident_at(line, i) else {
+    let Some((name, after)) = ident_at(line, i)? else {
         return Err(TranslateError::new(
             line[i].line,
             line[i].col,
@@ -130,7 +145,7 @@ fn directive(line: &[Ch], macros: &mut Macros) -> Result<(), TranslateError> {
         "define" => define(line, after, hash, macros),
         "undef" => {
             let j = skip_ws(line, after);
-            let Some((n, _)) = ident_at(line, j) else {
+            let Some((n, _)) = ident_at(line, j)? else {
                 return Err(TranslateError::new(
                     hash.line,
                     hash.col,
@@ -151,7 +166,7 @@ fn directive(line: &[Ch], macros: &mut Macros) -> Result<(), TranslateError> {
 fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<(), TranslateError> {
     let bad = |m: &str| TranslateError::new(hash.line, hash.col, m.to_string());
     let j = skip_ws(line, after);
-    let Some((name, mut k)) = ident_at(line, j) else {
+    let Some((name, mut k)) = ident_at(line, j)? else {
         return Err(bad("#define expects a macro name"));
     };
     let mut params = None;
@@ -164,7 +179,7 @@ fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<()
                 k += 1;
                 break;
             }
-            let Some((p, nk)) = ident_at(line, k) else {
+            let Some((p, nk)) = ident_at(line, k)? else {
                 return Err(bad("malformed #define parameter list"));
             };
             ps.push(p);
@@ -178,7 +193,12 @@ fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<()
                 _ => return Err(bad("malformed #define parameter list")),
             }
         }
-        params = Some(ps);
+        let count = ps.len();
+        let mut index = HashMap::with_capacity(count);
+        for (n, p) in ps.into_iter().enumerate() {
+            index.entry(p).or_insert(n);
+        }
+        params = Some(Params { count, index });
     }
     let body = lex(&line[k..])?;
     macros.insert(name, Macro { params, body });
@@ -190,8 +210,21 @@ fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<()
 const MAX_DEPTH: usize = 128;
 /// Maximum tokens examined by expansion in one `preprocess_tokens` call: one
 /// budget for the whole input, counting every token at every nesting level
-/// (so pass-through tokens and argument copies count too). `include.fx` is about
-/// 1-2 thousand tokens and corpus shaders a few thousand more; this stops exponential ("billion laughs") expansion.
+/// (so pass-through tokens and argument copies count too), charged BEFORE the
+/// copy is allocated. `include.fx` is about 1-2 thousand tokens and corpus
+/// shaders a few thousand more; this stops exponential ("billion laughs")
+/// expansion.
+///
+/// Resource guarantee, for ANY input:
+/// - Memory: every token held by expansion was charged, and a token is a
+///   fixed-size `PTok` (40 bytes) whose identifier text is a shared `Arc<str>`
+///   of at most [`MAX_TOKEN_LEN`] chars created only by the lexer, so a copy
+///   never copies text. Worst case is about `MAX_TOKENS * size_of::<PTok>()`
+///   (~80 MB, plus `Vec` growth slack) on top of the lexed source.
+/// - Time: per charged token the work is O(MAX_TOKEN_LEN) (hash lookups of a
+///   bounded identifier, O(1) parameter lookup via `Params::index`) plus
+///   O(MAX_DEPTH) for the active-macro check, so expansion is linear in
+///   `MAX_TOKENS` plus the input size.
 const MAX_TOKENS: usize = 2_000_000;
 
 /// A token plus the C "painted blue" mark: an identifier met while its own
@@ -290,18 +323,18 @@ fn expand_p(
                 }
                 let (args, next) = collect_args(toks, i + 2, t)?;
                 limits.charge(args.iter().map(Vec::len).sum(), t)?;
-                let n_args = if params.is_empty() && args.len() == 1 && args[0].is_empty() {
+                let n_args = if params.count == 0 && args.len() == 1 && args[0].is_empty() {
                     0
                 } else {
                     args.len()
                 };
-                if n_args != params.len() {
+                if n_args != params.count {
                     return Err(TranslateError::new(
                         t.line,
                         t.col,
                         format!(
                             "macro {name} expects {} argument(s), got {n_args}",
-                            params.len()
+                            params.count
                         ),
                     ));
                 }
@@ -310,7 +343,7 @@ fn expand_p(
                     .map(|a| expand_p(a, macros, active, depth + 1, limits))
                     .collect::<Result<_, _>>()?;
                 for b in &m.body {
-                    match b.ident().and_then(|id| params.iter().position(|p| p == id)) {
+                    match b.ident().and_then(|id| params.index.get(id).copied()) {
                         Some(p) => {
                             limits.charge(expanded[p].len(), t)?;
                             replacement.extend(expanded[p].iter().cloned());
@@ -368,4 +401,15 @@ fn collect_args(
         name.col,
         "unterminated macro invocation",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PTok;
+
+    #[test]
+    fn ptok_is_small_and_fixed_size() {
+        // The memory bound documented on MAX_TOKENS relies on this.
+        assert!(std::mem::size_of::<PTok>() <= 40);
+    }
 }

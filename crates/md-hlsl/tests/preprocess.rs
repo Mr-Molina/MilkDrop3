@@ -5,7 +5,7 @@ fn texts(s: &str) -> Vec<String> {
         .unwrap()
         .into_iter()
         .map(|t| match t.kind {
-            Ident(s) => s,
+            Ident(s) => s.to_string(),
             Int(i) => i.to_string(),
             Float(f) => format!("{f:?}"),
             Op(o) => o.to_string(),
@@ -169,4 +169,79 @@ fn argument_substitution_is_charged_before_allocation() {
     let e = preprocess_tokens(&src).unwrap_err();
     assert!(e.message.contains("too large"), "{e}");
     assert!(t.elapsed().as_secs() < 10);
+}
+
+#[test]
+fn overlong_identifiers_and_literals_are_errors() {
+    // Token text is capped so that per-token memory is bounded regardless of
+    // how often expansion copies a token.
+    let ok = "a".repeat(256);
+    assert_eq!(texts(&format!("{ok} b")), vec![ok.clone(), "b".to_string()]);
+    let long = "a".repeat(257);
+    for src in [
+        long.clone(),
+        format!("#define D0 {long}\nD0\n"),
+        format!("#define {long} 1\n"),
+        format!("#define F({long}) 1\n"),
+        format!("#undef {long}\n"),
+        format!("1.{}", "0".repeat(300)),
+        "1".repeat(300),
+    ] {
+        let e = preprocess_tokens(&src).unwrap_err();
+        assert!(e.message.contains("too long"), "{e}");
+    }
+    let e = md_hlsl::tokenize(&long).unwrap_err();
+    assert!(e.message.contains("too long"), "{e}");
+}
+
+#[test]
+fn long_identifier_doubling_is_rejected_cheaply() {
+    // Review probe: a 20 KB source whose 20,000-char identifier, doubled 17
+    // times, used to return Ok after peaking at ~2.5 GB RSS.
+    let mut src = format!("#define D0 {}\n", "a".repeat(20_000));
+    for i in 1..=17 {
+        src.push_str(&format!("#define D{i} D{} D{}\n", i - 1, i - 1));
+    }
+    src.push_str("D17\n");
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("too long"), "{e}");
+}
+
+#[test]
+fn object_macro_chain_hits_the_depth_cap() {
+    // A300 -> A299 -> ... -> A0 -> x: each step is one token, so only the
+    // nesting cap (MAX_DEPTH = 128) can stop it.
+    let mut src = String::from("#define A0 x\n");
+    for i in 1..=300 {
+        src.push_str(&format!("#define A{i} A{}\n", i - 1));
+    }
+    src.push_str("A300\n");
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("nested too deeply"), "{e}");
+    // Just under the cap still expands.
+    let mut ok = String::from("#define A0 x\n");
+    for i in 1..=100 {
+        ok.push_str(&format!("#define A{i} A{}\n", i - 1));
+    }
+    ok.push_str("A100\n");
+    assert_eq!(texts(&ok), vec!["x"]);
+}
+
+#[test]
+fn parameter_lookup_does_not_scale_with_parameter_count() {
+    // Review probe: 20,000 params x 20,000-token body x 20 calls was 8e9
+    // linear parameter scans (3.2 s release). With a map it is linear.
+    let n = 20_000;
+    let params: Vec<String> = (0..n).map(|i| format!("p{i}")).collect();
+    let body = vec!["q"; n].join(" ");
+    let args = vec!["1"; n].join(",");
+    let calls = vec![format!("F({args})"); 20].join(" ");
+    let src = format!("#define F({}) {body}\n{calls}\n", params.join(","));
+    let toks = preprocess_tokens(&src).unwrap();
+    assert_eq!(toks.len(), 20 * n);
+    // Duplicate-free substitution still picks the right argument.
+    assert_eq!(
+        texts("#define G(a, b, c) c b a\nG(1, 2, 3)"),
+        vec!["3", "2", "1"]
+    );
 }

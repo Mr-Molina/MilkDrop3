@@ -1,10 +1,20 @@
 //! Token types shared by the preprocessor, lexer and (Task 4.2) parser.
 
+use std::sync::Arc;
+
+/// Longest identifier or numeric literal the lexer accepts, in characters;
+/// longer ones are a `TranslateError`. The corpus and `include.fx` peak at 32
+/// (identifier) and 17 (literal). Together with the shared `Arc<str>` text this
+/// bounds the memory any one token costs, however often expansion copies it.
+pub const MAX_TOKEN_LEN: usize = 256;
+
 /// Token payload.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokKind {
-    /// Identifier or keyword (keywords are not distinguished here).
-    Ident(String),
+    /// Identifier or keyword (keywords are not distinguished here). The text
+    /// is shared (`Arc<str>`), so copying a token never copies its text; it is
+    /// at most [`MAX_TOKEN_LEN`] characters.
+    Ident(Arc<str>),
     /// Integer literal (`1`, `0x1F`, `010` octal, `1u`).
     Int(i64),
     /// Floating literal (`1.0`, `1.f`, `.5`, `1e-3`, `1.0h`); the suffix is dropped.
@@ -32,7 +42,7 @@ impl Token {
     /// The identifier text, if this is an identifier.
     pub fn ident(&self) -> Option<&str> {
         match &self.kind {
-            TokKind::Ident(s) => Some(s),
+            TokKind::Ident(s) => Some(s.as_ref()),
             _ => None,
         }
     }
