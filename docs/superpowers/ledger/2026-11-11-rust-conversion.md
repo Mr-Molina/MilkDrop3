@@ -169,3 +169,6 @@ Tasks 2.4/2.5: minor (deferred): %.5f-vs-%.3f per-key formats only spot-checked 
 Task 2.4: complete (commits 8e97d42..47d0dcb, review clean)
 Task 2.5: complete (commits 47d0dcb..eb328fa, review clean)
 Milestone 2: complete.
+Task 3.2: Ruling: added align.rs porting AlignWaves (pluginshell.cpp:2342-2488) — SoundData.wave is the post-alignment waveform (what preset analysis and custom/main waves read) and SoundData.spectrum is the shell spectrum from the smoothed, unaligned input — not in the brief but required for parity — cost if wrong: waveform phase differs from C++.
+Task 3.2: Ruling: the preset-facing bass/mid/treb FFT keeps the C++ quirk `myfft.Init(576,512,-1)` (equalize ON, envelope power 1.0) — do not "fix" it later; AdjustRateToFPS = powf(powf(r,fps1),1/fps) with 14 fps reference for shell averages and 30 fps for preset-facing ones; med_avg filled from the shell's left-channel med_avg (unused by C++ consumers) — cost if wrong: none (C++ parity).
+Task 3.1: Note: FFT magnitude is unnormalised (bin-k sine amplitude 100 → 28800 for k multiple of 8).
