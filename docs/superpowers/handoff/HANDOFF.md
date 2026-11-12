@@ -139,3 +139,29 @@ Use the brief at `sdd-workspace/task-5.8-brief.md`. Binding notes:
 - **Clock:** use FixedClock for both the absolute clock and the since-preset clock, so output is deterministic. Use a seeded Pcg32 for all randomness. Add a test that rendering twice gives byte-identical PNGs.
 - **Driver scope:** the minimal driver uses only static preset values (`PerFrameVars::from_preset`) plus progress.
 - **Golden image:** no Windows captures exist. Bless `tests/golden/rust/default_60.png` with `tests/golden/test_signal.wav` and inspect the PNG visually (agents can view images). Choose `max_dssim` to tolerate cross-device float differences.
+
+## Session tooling added after the hand-off (container-local, not part of the port)
+
+In the last session the owner asked for two Claude Code plugin marketplaces, which were cloned read-only and added. Neither outlives a container reset. To recreate them:
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Mr-Molina/tokeneconomizer /home/user/mr-molina/tokeneconomizer
+```
+
+```bash
+claude plugin marketplace add /home/user/mr-molina/tokeneconomizer
+```
+
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Mr-Molina/rea /home/user/mr-molina/rea
+```
+
+```bash
+claude plugin marketplace add /home/user/mr-molina/rea
+```
+
+```bash
+claude plugin install rea@rea
+```
+
+`tokeneconomizer` was added as a marketplace only; its plugin is not installed. `rea` 6.8.0 is installed at user scope, and its installed copy ships the prebuilt MCP server.
