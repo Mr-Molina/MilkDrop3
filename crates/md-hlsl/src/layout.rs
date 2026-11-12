@@ -38,6 +38,22 @@ pub const MD_UNIFORMS_SIZE: u64 = 1920;
 /// `D3D9_HALF_TEXEL * texel_size` so the feedback loop does not drift.
 pub const D3D9_HALF_TEXEL: f32 = -0.5;
 
+/// Binding (in group 0) of the `VsParams` block every textured built-in
+/// vertex shader in `assets/shaders/` reads (Task 4.8; `fixed_color` has none): `texel_size: vec2<f32>` at
+/// offset 0, `half_texel: f32` at 8 (fill with [`D3D9_HALF_TEXEL`]), `pad`
+/// at 12. Binding 2 so it never collides with the preset fragment shader's
+/// `U` (binding 0) and `T` (binding 1) in the same pipeline.
+pub const BUILTIN_VS_PARAMS_BINDING: u32 = 2;
+
+/// Size in bytes of the built-in `VsParams` block.
+pub const BUILTIN_VS_PARAMS_SIZE: u64 = 16;
+
+/// Size in bytes of the `BlurUniforms` block of `blur1_ps`/`blur2_ps`
+/// (`@group(0) @binding(0)`): seven `vec4<f32>` `_c0`..`_c6` mirroring the
+/// D3D9 constant registers, `_cN` at offset `16·N` (Task 4.8; see
+/// `assets/shaders/README.md`).
+pub const BLUR_UNIFORMS_SIZE: u64 = 112;
+
 /// Name of the unused field of an otherwise empty `TexSizes` block.
 pub const TEXSIZES_PLACEHOLDER: &str = "md_unused";
 
