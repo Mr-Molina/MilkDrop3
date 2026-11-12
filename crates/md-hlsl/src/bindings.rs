@@ -121,21 +121,7 @@ pub fn texsize_root(name: &str) -> Option<&str> {
 
 /// Resolve sampler slots and `texsize_*` uniforms. See the module docs.
 pub fn resolve_bindings(m: &TypedModule) -> Result<Bindings, TranslateError> {
-    let mut w = Walker::new(m);
-    let entry = m.decls.iter().find_map(|d| match d {
-        TDecl::Function(f) if f.hlsl_name == "PS" => Some(f),
-        _ => None,
-    });
-    match entry {
-        Some(f) => w.function(f),
-        None => {
-            for d in &m.decls {
-                if let TDecl::Function(f) = d {
-                    w.function(f);
-                }
-            }
-        }
-    }
+    let w = walk(m);
 
     let mut out = Bindings::default();
     for d in &m.decls {
@@ -185,6 +171,41 @@ pub fn resolve_bindings(m: &TypedModule) -> Result<Bindings, TranslateError> {
     }
     out.texsize_names = w.texsize;
     Ok(out)
+}
+
+/// Functions (unique names) and globals reachable from the entry point
+/// (shared with the emitter, Task 4.4).
+pub(crate) struct Reach<'a> {
+    pub fns: HashSet<&'a str>,
+    pub globals: HashSet<&'a str>,
+}
+
+/// What the entry point `PS` reaches (every function if there is none).
+pub(crate) fn reach(m: &TypedModule) -> Reach<'_> {
+    let w = walk(m);
+    Reach {
+        fns: w.seen_fns,
+        globals: w.used,
+    }
+}
+
+fn walk(m: &TypedModule) -> Walker<'_> {
+    let mut w = Walker::new(m);
+    let entry = m.decls.iter().find_map(|d| match d {
+        TDecl::Function(f) if f.hlsl_name == "PS" => Some(f),
+        _ => None,
+    });
+    match entry {
+        Some(f) => w.function(f),
+        None => {
+            for d in &m.decls {
+                if let TDecl::Function(f) = d {
+                    w.function(f);
+                }
+            }
+        }
+    }
+    w
 }
 
 fn err(pos: Pos, msg: String) -> TranslateError {

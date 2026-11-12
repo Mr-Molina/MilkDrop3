@@ -3,12 +3,10 @@
 //! shader bodies; (Task 4.2) parse the same inputs; and (Task 4.3) type-check
 //! them wrapped as Task 4.6 will.
 
-use md_preset::parse_milk;
+mod common;
 
-fn asset(name: &str) -> String {
-    let p = format!("{}/../../assets/hlsl/{name}", env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))
-}
+use common::asset;
+use md_preset::parse_milk;
 
 #[test]
 fn include_fx_and_default_shaders_preprocess() {
@@ -99,29 +97,10 @@ fn every_corpus_shader_parses() {
 
 /// Task 4.3: the same inputs, with the 4.6 defines prepended and the
 /// `shader_body` wrapped at AST level into `void PS(...)` exactly as
-/// `plugin.cpp::LoadShaderFromMemory` does, type-check without error.
+/// `plugin.cpp::LoadShaderFromMemory` does ([`common::wrap_preset`]),
+/// type-check without error.
 #[test]
 fn every_corpus_shader_type_checks() {
-    use md_hlsl::ast::Decl;
-    const WARP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-        #define uv _uv.xy\n#define uv_orig _uv.zw\n";
-    const COMP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-        #define uv _uv.xy\n#define uv_orig _uv.xy\n#define hue_shader _vDiffuse.xyz\n";
-    const WARP_PARAMS: &str = "float4 _vDiffuse : COLOR, float4 _uv : TEXCOORD0, \
-        float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
-    const COMP_PARAMS: &str = "float4 _vDiffuse : COLOR, float2 _uv : TEXCOORD0, \
-        float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
-    let wrapper = |params: &str| {
-        let src = format!(
-            "void PS({params}) {{ float3 ret = 0; _return_value = float4(ret.xyz, _vDiffuse.w); }}"
-        );
-        let m = md_hlsl::parse(&md_hlsl::preprocess_tokens(&src).unwrap()).unwrap();
-        match m.decls.into_iter().next() {
-            Some(Decl::Function(f)) => f,
-            d => panic!("{d:?}"),
-        }
-    };
-    let inc = asset("include.fx");
     let mut bodies = vec![
         ("warp_ps.fx".to_string(), true, asset("warp_ps.fx")),
         ("comp_ps.fx".to_string(), false, asset("comp_ps.fx")),
@@ -139,23 +118,7 @@ fn every_corpus_shader_type_checks() {
     assert!(bodies.len() >= 62, "{}", bodies.len());
     let mut failures = Vec::new();
     for (what, warp, body) in &bodies {
-        let (defines, params) = if *warp {
-            (WARP_DEFINES, WARP_PARAMS)
-        } else {
-            (COMP_DEFINES, COMP_PARAMS)
-        };
-        let src = format!("{inc}\n{defines}{body}");
-        let mut m = md_hlsl::preprocess_tokens(&src)
-            .and_then(|t| md_hlsl::parse(&t))
-            .unwrap_or_else(|e| panic!("{what}: {e}"));
-        let Some(Decl::ShaderBody(sb)) = m.decls.pop() else {
-            panic!("{what}: no shader_body");
-        };
-        let mut f = wrapper(params);
-        let last = f.body.stmts.pop().unwrap();
-        f.body.stmts.extend(sb.body.stmts);
-        f.body.stmts.push(last);
-        m.decls.push(Decl::Function(f));
+        let m = common::wrap_preset(body, *warp).unwrap_or_else(|e| panic!("{what}: {e}"));
         if let Err(e) = md_hlsl::check(&m) {
             failures.push(format!("{what}: {e}"));
         }
