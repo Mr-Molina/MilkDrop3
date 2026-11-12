@@ -16,7 +16,8 @@
 //! reversal" (old preset with a comp shader, new one without) draws the old
 //! comp shader with `InvSrcAlpha/SrcAlpha` ([`BlendMode::InvAlpha`]). Every
 //! program has all three pipelines. The colour target is the main
-//! (ping-pong) texture format.
+//! (ping-pong) texture format for warp programs and always
+//! [`crate::comp::COMP_FORMAT`] (`Rgba8Unorm`) for composite programs.
 //!
 //! `main` binds one of the two ping-pong textures, so group 1 exists twice:
 //! [`ShaderProgram::bind`] takes the index of the texture to read — when
@@ -464,7 +465,12 @@ impl PresetLayouts {
                     entry_point: Some("fs_main"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: targets.vs[0].format,
+                        format: match spec.kind {
+                            ShaderKind::Warp => targets.vs[0].format,
+                            // The composite draws into the 8-bit
+                            // intermediate (the C++'s X8R8G8B8 back buffer).
+                            ShaderKind::Comp => crate::comp::COMP_FORMAT,
+                        },
                         blend: blend.state(),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],

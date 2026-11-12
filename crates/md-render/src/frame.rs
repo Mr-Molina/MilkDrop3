@@ -181,6 +181,9 @@ impl Renderer {
         for p in progs {
             self.rebind(p);
         }
+        // One dynamic vertex buffer frame: every fixed-function draw of this
+        // frame (Milestone 6 hooks, the composite) writes after this.
+        self.dynbuf.begin_frame();
         let mut encoder =
             self.gpu
                 .device()
@@ -263,8 +266,12 @@ impl Renderer {
         let old_comp = input.old_gpu.and_then(|g| g.comp.as_ref());
         let plans = plan_comp_passes(blending, old_comp.is_some(), input.gpu.comp.is_some());
         let mut out = CompFrame {
-            fixed_sampler: Some(fixed_sampler),
-            ..CompFrame::default()
+            passes: Vec::new(),
+            fixed: Vec::new(),
+            fixed_sampler,
+            vertices: Vec::new(),
+            indices: Vec::new(),
+            ranges: Vec::new(),
         };
         if plans.iter().any(|p| matches!(p, CompPass::Shader { .. })) {
             let shade = hue_shades(input.now, self.rand_start);
@@ -334,8 +341,12 @@ impl Renderer {
         })
     }
 
-    /// Step 5: composite into `target` (any colour format; its texture's
-    /// size), submit the frame and swap the ping-pong textures.
+    /// Step 5: composite into `target` (any non-sRGB colour format; its
+    /// texture's size), submit the frame and swap the ping-pong textures.
+    ///
+    /// # Panics
+    /// If `target`'s texture format is sRGB (the C++ back buffer is not
+    /// gamma-encoded).
     pub fn present(&mut self, ctx: FrameCtx, target: &wgpu::TextureView) {
         let FrameCtx { mut encoder, comp } = ctx;
         self.record_comp(&mut encoder, &comp, target);

@@ -117,7 +117,9 @@ fn two_frames_of_default_preset_produce_decaying_image() {
     let vars = identity_vars(&preset);
     let target = Texture2d::new_target(r.gpu(), W, H, wgpu::TextureFormat::Rgba8Unorm, false);
 
-    // Frame 0 clears the old VS (m_nFramesSinceResize == 0) and draws black.
+    // Frame 0 clears the old VS (m_nFramesSinceResize == 0) and draws
+    // black, even though the source was painted white before it.
+    upload_solid(r.gpu(), warp_source(&r), [255; 4]);
     let f0 = frame(&mut r, &preset, &pg, &vars, &target);
     assert_eq!(mean_rgb(&f0), 0.0);
     // Paint white into the next warp source: frame 1 shows 1 - 0.004,
@@ -141,17 +143,39 @@ fn two_frames_of_default_preset_produce_decaying_image() {
 /// `grey` source.
 fn no_shader_frame(gpu: &Gpu, grey: u8, gamma: f64, format: wgpu::TextureFormat) -> Vec<u8> {
     let mut r = renderer(gpu);
+    no_shader_run(
+        &mut r,
+        &[grey, grey, grey, 255],
+        |v| v.gamma = gamma,
+        format,
+    )
+}
+
+/// Run a MilkDrop 1 preset (no shaders) for one frame, upload `source`
+/// (one texel repeated, or a full `W`×`H` RGBA8 image) to the warp
+/// source, apply `set` to the identity vars and return the next frame.
+fn no_shader_run(
+    r: &mut Renderer,
+    source: &[u8],
+    set: impl Fn(&mut PerFrameVars),
+    format: wgpu::TextureFormat,
+) -> Vec<u8> {
     let preset = md_preset::Preset::defaults();
     let pg = PresetGpu {
         warp: None,
         comp: None,
     };
     let mut vars = identity_vars(&preset);
-    vars.gamma = gamma;
+    set(&mut vars);
     let target = Texture2d::new_target(r.gpu(), W, H, format, false);
-    frame(&mut r, &preset, &pg, &vars, &target);
-    upload_solid(r.gpu(), warp_source(&r), [grey, grey, grey, 255]);
-    frame(&mut r, &preset, &pg, &vars, &target)
+    frame(r, &preset, &pg, &vars, &target);
+    let src = warp_source(r);
+    if source.len() == 4 {
+        upload_solid(r.gpu(), src, [source[0], source[1], source[2], source[3]]);
+    } else {
+        upload(r.gpu(), src, source);
+    }
+    frame(r, &preset, &pg, &vars, &target)
 }
 
 #[test]
@@ -248,6 +272,12 @@ fn renderer_resize_clamps_to_device_limits() {
         px[1].abs_diff(128) <= 1 && px[2].abs_diff(255) <= 1,
         "{px:?}"
     );
+    // A resize to the same size keeps the textures but still clears the
+    // warp source on the next frame (m_nFramesSinceResize = 0).
+    r.resize(64, 48);
+    upload_solid(r.gpu(), warp_source(&r), [255; 4]);
+    let out = frame(&mut r, &preset, &pg, &vars, &target);
+    assert_eq!(mean_rgb(&out), 0.0, "cleared after resize");
 }
 
 /// Top half: red rising with x; bottom half: blue.
@@ -418,4 +448,158 @@ fn blend_composites_old_and_new_by_the_mesh_alpha() {
     let px = blend_frame(&gpu, &blend_preset(None), &blend_preset(Some(black)));
     assert!(px[0].abs_diff(192) <= 1, "new shader only: {px:?}");
     assert_eq!(px[3], 255);
+}
+
+/// Upload a solid `Rgba16Float` colour (`f16` bits per channel).
+fn upload_solid_f16(gpu: &Gpu, t: &Texture2d, rgba: [u16; 4]) {
+    let data: Vec<u8> = (0..t.w * t.h)
+        .flat_map(|_| {
+            rgba.iter()
+                .flat_map(|c| c.to_le_bytes())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    gpu.queue().write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &t.tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(t.w * 8),
+            rows_per_image: Some(t.h),
+        },
+        wgpu::Extent3d {
+            width: t.w,
+            height: t.h,
+            depth_or_array_layers: 1,
+        },
+    );
+    md_render::generate_mips(gpu, t);
+}
+
+#[test]
+fn composite_saturates_at_8_bits_with_16_bit_textures() {
+    let Some(gpu) = gpu_or_skip("composite_saturates_at_8_bits_with_16_bit_textures") else {
+        return;
+    };
+    let settings = RenderSettings {
+        tex_bits: 16,
+        ..RenderSettings::new(W, H)
+    };
+    let mut r = Renderer::new(gpu.device(), gpu.queue(), settings, 3).expect("renderer");
+    assert_eq!(r.vs(0).format, wgpu::TextureFormat::Rgba16Float);
+    assert_eq!(r.comp_texture().format, wgpu::TextureFormat::Rgba8Unorm);
+    let preset = md_preset::Preset::defaults();
+    let pg = PresetGpu {
+        warp: None,
+        comp: None,
+    };
+    let mut vars = identity_vars(&preset);
+    // 0.75 grey at gamma 2 is 1.5, saturated to 1.0 by the 8-bit back
+    // buffer; brighten (invert, square, invert) then gives
+    // 1 - (1 - 1)^2 = 1.0 -> 255. Unclamped it would be
+    // 1 - (1 - 1.5)^2 = 0.75 -> 191.
+    (vars.gamma, vars.brighten) = (2.0, 1.0);
+    let target = Texture2d::new_target(r.gpu(), W, H, wgpu::TextureFormat::Rgba8Unorm, false);
+    frame(&mut r, &preset, &pg, &vars, &target);
+    upload_solid_f16(r.gpu(), warp_source(&r), [0x3A00, 0x3A00, 0x3A00, 0x3C00]);
+    let out = frame(&mut r, &preset, &pg, &vars, &target);
+    assert!(
+        out.chunks_exact(4).all(|p| p[..3] == [255; 3]),
+        "{:?}",
+        &out[..4]
+    );
+
+    // A 16-bit preset composite shader also draws into the 8-bit target.
+    let mut p = md_preset::Preset::defaults();
+    (p.warp_ps, p.comp_ps) = (2, 2);
+    p.warp_shader = md_preset::gen_warp_shader(1.0, true);
+    p.comp_shader = "shader_body { ret = tex2D(sampler_main, uv).xyz * 2; }".to_string();
+    let pg = r.load_preset(&p).expect("load");
+    assert!(r.last_errors().is_empty(), "{:?}", r.last_errors());
+    let vars = identity_vars(&p);
+    frame(&mut r, &p, &pg, &vars, &target);
+    upload_solid_f16(r.gpu(), warp_source(&r), [0x3800, 0x3800, 0x3800, 0x3C00]);
+    let out = frame(&mut r, &p, &pg, &vars, &target);
+    assert!(
+        out.chunks_exact(4).all(|p| p[..3] == [255; 3]),
+        "{:?}",
+        &out[..4]
+    );
+}
+
+#[test]
+fn no_shader_echo_zooms_and_flips() {
+    let Some(gpu) = gpu_or_skip("no_shader_echo_zooms_and_flips") else {
+        return;
+    };
+    // Red where u < 0.4, black elsewhere. Echo alpha 0.5, zoom 2: layer 0
+    // samples u, layer 1 samples 0.25 + 0.5 u (flipped: 1 - that); each is
+    // weighted by (int)(0.5 * 255) = 127.
+    let img: Vec<u8> = (0..W * H)
+        .flat_map(|i| {
+            if (i % W) * 10 < W * 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 0, 0, 255]
+            }
+        })
+        .collect();
+    let red_at = |out: &[u8], x: u32| out[((H / 2 * W + x) * 4) as usize];
+    let run = |orient: f64| {
+        let mut r = renderer(&gpu);
+        no_shader_run(
+            &mut r,
+            &img,
+            |v| (v.echo_alpha, v.echo_zoom, v.echo_orient) = (0.5, 2.0, orient),
+            wgpu::TextureFormat::Rgba8Unorm,
+        )
+    };
+    let out = run(0.0);
+    // u = 0.1: both layers red; u = 0.34: layer 1 at 0.42 is black (a
+    // zoom of 1 would keep it red); u = 0.9: both black.
+    assert!(red_at(&out, 10).abs_diff(254) <= 2, "{}", red_at(&out, 10));
+    assert!(red_at(&out, 33).abs_diff(127) <= 2, "{}", red_at(&out, 33));
+    assert_eq!(red_at(&out, 86), 0);
+    // Orientation 1 flips layer 1 in u: u = 0.1 -> 0.7 (black),
+    // u = 0.9 -> 0.3 (red).
+    let out = run(1.0);
+    assert!(red_at(&out, 10).abs_diff(127) <= 2, "{}", red_at(&out, 10));
+    assert!(red_at(&out, 86).abs_diff(127) <= 2, "{}", red_at(&out, 86));
+}
+
+#[test]
+fn no_shader_filters_follow_d3d9_blending() {
+    let Some(gpu) = gpu_or_skip("no_shader_filters_follow_d3d9_blending") else {
+        return;
+    };
+    // Source d = 64/255, gamma 1; each filter draws white quads, every
+    // result rounded to 8 bits as the back buffer does.
+    let run = |set: fn(&mut PerFrameVars)| {
+        let mut r = renderer(&gpu);
+        let out = no_shader_run(
+            &mut r,
+            &[64, 64, 64, 255],
+            set,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        out[((H / 2 * W + W / 2) * 4) as usize]
+    };
+    // invert: INVDESTCOLOR/ZERO -> 1 - d = 191.
+    let invert = run(|v| v.invert = 1.0);
+    assert!(invert.abs_diff(191) <= 1, "invert {invert}");
+    // darken: ZERO/DESTCOLOR -> d * d = 64*64/255 = 16.
+    let darken = run(|v| v.darken = 1.0);
+    assert!(darken.abs_diff(16) <= 1, "darken {darken}");
+    // solarize: ZERO/INVDESTCOLOR -> d(1-d) = 48, then DESTCOLOR/ONE ->
+    // 1*48 + 48 = 96.
+    let solarize = run(|v| v.solarize = 1.0);
+    assert!(solarize.abs_diff(96) <= 1, "solarize {solarize}");
+    // brighten: invert 191, square 191*191/255 = 143, invert 112.
+    let brighten = run(|v| v.brighten = 1.0);
+    assert!(brighten.abs_diff(112) <= 1, "brighten {brighten}");
 }

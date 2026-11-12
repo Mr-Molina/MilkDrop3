@@ -20,15 +20,19 @@
 //! - Passes ([`plan_comp_passes`], `RenderFrame` 1072-1119): see there.
 //!   Tiles are culled by alpha exactly as the C++ does while blending.
 //!
-//! Target (ledger Task 5.5 note): preset composite pipelines are built for
-//! the main texture format, while the C++ composites into the back buffer.
-//! md-render composites into an intermediate texture of the main format
-//! and the window size ([`crate::Renderer::comp_texture`]) and then copies
-//! it into the caller's target view with a cached fixed-function pipeline
-//! for the target's format (any colour format; the copy writes alpha 1,
-//! like the C++'s `X8R8G8B8` back buffer). One extra full-screen pass, in
+//! Target (ledger Task 5.5 note): the C++ composites into an 8-bit
+//! `X8R8G8B8` back buffer that saturates after every draw (gamma passes,
+//! the brighten/solarize/invert filters and blend pass 1 all see the
+//! clamped result). md-render composites into an intermediate texture of
+//! [`COMP_FORMAT`] (`Rgba8Unorm`, whatever the main texture format) and
+//! the window size ([`crate::Renderer::comp_texture`]); every composite
+//! pipeline (preset composite programs and the fixed passes) targets that
+//! format. The result is then copied into the caller's target view with a
+//! cached fixed-function pipeline for the target's format (any non-sRGB
+//! colour format; the copy writes alpha 1). One extra full-screen pass, in
 //! exchange for one pipeline set per program regardless of how many
-//! surface formats are used, and an inspectable composite.
+//! surface formats are used, and an inspectable composite. sRGB targets
+//! are rejected: the C++ back buffer is not gamma-encoded.
 
 use crate::blend::BlendMode;
 use crate::comp_fixed::FixedCompDraw;
@@ -41,6 +45,9 @@ use crate::vertex::Vertex;
 use crate::warp::{Cull, WarpBuffers};
 use std::f32::consts::{PI, TAU};
 use std::ops::Range;
+
+/// The composite's format: the C++'s 8-bit back buffer (see the module docs).
+pub const COMP_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// `FCGSX`: composite grid vertices across (plugin.h:511).
 pub const COMP_GRID_X: u32 = 32;
@@ -305,14 +312,14 @@ pub fn cull_indices(vertices: &[Vertex], indices: &[u32], cull: Cull) -> Vec<u32
 
 /// Everything the composite of one frame draws, prepared by
 /// [`Renderer::begin_frame`](crate::Renderer::begin_frame).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct CompFrame<'a> {
     /// Passes with their program (`None` for [`CompPass::Fixed`]).
     pub passes: Vec<(CompPass, Option<&'a ShaderProgram>)>,
     /// The fixed path's quads.
     pub fixed: Vec<FixedCompDraw>,
     /// Stage-0 address mode the fixed path inherits.
-    pub fixed_sampler: Option<SamplerKind>,
+    pub fixed_sampler: SamplerKind,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     /// Index range per pass (empty for the fixed pass).
@@ -347,7 +354,6 @@ impl Renderer {
             &frame.vertices,
             &frame.indices,
         );
-        self.dynbuf.begin_frame();
         let main = self.vs_target;
         let source = &self.vs[main];
         let comp = &self.comp_tex;
@@ -365,7 +371,7 @@ impl Renderer {
         for ((pass, prog), range) in frame.passes.iter().zip(&frame.ranges) {
             match (pass, prog) {
                 (CompPass::Fixed, _) => {
-                    let sampler = frame.fixed_sampler.unwrap_or(SamplerKind::LinearWrap);
+                    let sampler = frame.fixed_sampler;
                     for d in &frame.fixed {
                         let mode = if d.textured {
                             FixedMode::TexModulate
@@ -394,6 +400,11 @@ impl Renderer {
 
         // Copy to the caller's target (its texture's format and size).
         let t = target.texture();
+        assert!(
+            !t.format().is_srgb(),
+            "present target {:?} is sRGB; the composite is not gamma-encoded",
+            t.format()
+        );
         let (tw, th) = (t.width(), t.height());
         let sampler = if (tw, th) == (comp.w, comp.h) {
             SamplerKind::PointClamp

@@ -16,7 +16,7 @@
 //! for `Renderer` there and faked in its tests, and calls it at tick 2 of
 //! its 8-tick schedule.
 
-use crate::comp::{comp_grid, CompGrid};
+use crate::comp::{comp_grid, CompGrid, COMP_FORMAT};
 use crate::dynbuf::DynamicVertexBuffer;
 use crate::gpu::Gpu;
 use crate::mesh::{mesh_aspect, WarpMesh};
@@ -158,7 +158,7 @@ pub struct Renderer {
     pub(crate) frames_since_resize: u32,
     /// `m_fRandStart[4]` (plugin.cpp:6623-6626), for the hue shader.
     pub(crate) rand_start: [f32; 4],
-    /// The composite's intermediate target (main format, window size).
+    /// The composite's intermediate target (`Rgba8Unorm`, window size).
     pub(crate) comp_tex: Texture2d,
     pub(crate) comp_grid: CompGrid,
     pub(crate) comp_buffers: Option<WarpBuffers>,
@@ -203,7 +203,7 @@ impl Renderer {
             mesh: WarpMesh::new(settings.grid_x, settings.grid_y, ax, ay),
             frames_since_resize: 0,
             rand_start,
-            comp_tex: Texture2d::new_target(&gpu, window.0, window.1, format, false),
+            comp_tex: Texture2d::new_target(&gpu, window.0, window.1, COMP_FORMAT, false),
             comp_grid: comp_grid(window, (w, h)),
             comp_buffers: None,
             dynbuf: DynamicVertexBuffer::new(&gpu, 1024),
@@ -260,7 +260,7 @@ impl Renderer {
         self.rand_start
     }
 
-    /// The composite's intermediate texture (main format, window size):
+    /// The composite's intermediate texture (`Rgba8Unorm`, window size):
     /// after [`Renderer::present`] it holds the frame copied to the target.
     pub fn comp_texture(&self) -> &Texture2d {
         &self.comp_tex
@@ -297,7 +297,8 @@ impl Renderer {
         }
         if window != self.window || tex != current {
             self.window = window;
-            self.comp_tex = Texture2d::new_target(&self.gpu, window.0, window.1, format, false);
+            self.comp_tex =
+                Texture2d::new_target(&self.gpu, window.0, window.1, COMP_FORMAT, false);
             self.comp_grid = comp_grid(window, tex);
             // Bind groups of the dropped textures.
             self.pipelines.clear_bind_groups();
