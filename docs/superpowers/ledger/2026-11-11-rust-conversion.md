@@ -240,3 +240,6 @@ Task 4.4: fix round 1/5 dispatched (Important: sincos aliasing — x evaluated a
 Task 4.4: Note (binds Task 4.9): `round` emits WGSL round (half-to-even); HLSL documents half-away-from-zero but fxc SM2/3 may expand to floor(x+0.5) — let the golden suite decide; integer `/`,`%` by zero follow WGSL (x/0 = x, x%0 = 0) whereas SM2/3 did int math in float (±inf then cast).
 Task 4.4: minor (deferred): `a[i] = (i = 2)` identifier index not snapshotted (unsequenced anyway); emitted before tests (RED via stub afterwards).
 Controller: milestone-4-context.md (workspace copy) annotated with the F24 matrix mapping; md-render dispatches must cite F24.
+Task 4.4: fix round 1/5 (4 addressed, 0 open; commits 5883af0..fc00132)
+Task 4.4: minor (deferred): struct reachability not tested for a struct used only in a for-init declaration.
+Task 4.4: complete (commits cf76d39..710f53d + fix fc00132, review clean after 1 fix round)
