@@ -213,19 +213,21 @@ const MAX_DEPTH: usize = 128;
 /// (so pass-through tokens and argument copies count too), charged BEFORE the
 /// copy is allocated. `include.fx` is about 1-2 thousand tokens and corpus
 /// shaders a few thousand more; this stops exponential ("billion laughs")
-/// expansion.
+/// expansion. 500 000 (was 2 000 000) keeps a budget-exhausting macro bomb
+/// within Task 4.10's 200 ms per-`translate` bound (2M took ~150 ms in a
+/// release build, over 200 ms under parallel load).
 ///
 /// Resource guarantee, for ANY input:
 /// - Memory: every token held by expansion was charged, and a token is a
 ///   fixed-size `PTok` (40 bytes) whose identifier text is a shared `Arc<str>`
 ///   of at most [`MAX_TOKEN_LEN`] chars created only by the lexer, so a copy
 ///   never copies text. Worst case is about `MAX_TOKENS * size_of::<PTok>()`
-///   (~80 MB, plus `Vec` growth slack) on top of the lexed source.
+///   (~20 MB, plus `Vec` growth slack) on top of the lexed source.
 /// - Time: per charged token the work is O(MAX_TOKEN_LEN) (hash lookups of a
 ///   bounded identifier, O(1) parameter lookup via `Params::index`) plus
 ///   O(MAX_DEPTH) for the active-macro check, so expansion is linear in
 ///   `MAX_TOKENS` plus the input size.
-const MAX_TOKENS: usize = 2_000_000;
+const MAX_TOKENS: usize = 500_000;
 
 /// A token plus the C "painted blue" mark: an identifier met while its own
 /// macro was being expanded is never expanded again, on any later rescan.

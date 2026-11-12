@@ -231,14 +231,15 @@ fn object_macro_chain_hits_the_depth_cap() {
 fn parameter_lookup_does_not_scale_with_parameter_count() {
     // Review probe: 20,000 params x 20,000-token body x 20 calls was 8e9
     // linear parameter scans (3.2 s release). With a map it is linear.
+    // (5 calls since MAX_TOKENS became 500,000: still 2e9 linear scans.)
     let n = 20_000;
     let params: Vec<String> = (0..n).map(|i| format!("p{i}")).collect();
     let body = vec!["q"; n].join(" ");
     let args = vec!["1"; n].join(",");
-    let calls = vec![format!("F({args})"); 20].join(" ");
+    let calls = vec![format!("F({args})"); 5].join(" ");
     let src = format!("#define F({}) {body}\n{calls}\n", params.join(","));
     let toks = preprocess_tokens(&src).unwrap();
-    assert_eq!(toks.len(), 20 * n);
+    assert_eq!(toks.len(), 5 * n);
     // Duplicate-free substitution still picks the right argument.
     assert_eq!(
         texts("#define G(a, b, c) c b a\nG(1, 2, 3)"),
