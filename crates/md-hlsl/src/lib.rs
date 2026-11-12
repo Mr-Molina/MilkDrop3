@@ -50,3 +50,7 @@ pub use typeck::check;
 pub use typed::{TypedModule, Warning};
 pub use types::Ty;
 pub use version::PsVersion;
+
+/// This crate's version (`CARGO_PKG_VERSION`); md-render keys its shader
+/// cache with it (preflight F2) so translator upgrades invalidate entries.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");

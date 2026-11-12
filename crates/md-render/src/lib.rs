@@ -13,6 +13,12 @@
 //! Task 5.4: the [`TextureStore`] — disk textures found and decoded on
 //! demand ([`load_image`]) under an LRU budget, the generated noise
 //! textures ([`noise`]) and `randNN` picks ([`RandPicks`]).
+//!
+//! Task 5.5: the [`Renderer`] (ping-pong main textures, blur textures,
+//! texture store, pipeline cache) and [`Renderer::load_preset`], which
+//! translates the preset's shaders through the [`ShaderCache`] (memory and
+//! disk), falls back to the default shaders on error, resolves every
+//! sampler ([`SlotSource`]) and builds a [`ShaderProgram`] per shader.
 #![forbid(unsafe_code)]
 
 mod blend;
@@ -24,7 +30,11 @@ mod image_load;
 mod mips;
 pub mod noise;
 mod pipelines;
+mod preset_bind;
+mod preset_gpu;
 mod readback;
+mod renderer;
+mod shader_cache;
 mod texcache;
 mod texture;
 mod textures;
@@ -38,7 +48,17 @@ pub use gpu::{gpu_or_skip, headless_device, headless_gpu, Gpu};
 pub use image_load::{load_image, ImageError};
 pub use mips::generate_mips;
 pub use pipelines::{DrawBatch, PipelineCache, PipelineKey};
+pub use preset_bind::{sampler_kind, SlotSource};
+pub use preset_gpu::{PresetGpu, ShaderProgram};
 pub use readback::{map_read, read_texture_level};
+pub use renderer::{
+    blur_texture_sizes, hlsl_ps_version, RenderError, RenderSettings, Renderer, DEFAULT_COMP_PS,
+    DEFAULT_WARP_PS, INCLUDE_FX,
+};
+pub use shader_cache::{
+    decode as decode_cache_entry, encode as encode_cache_entry, shader_key, CachedShader,
+    ShaderCache, ShaderKey, CACHE_EXT, CACHE_FORMAT, MAX_MEMORY_ENTRIES,
+};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
 pub use textures::{
