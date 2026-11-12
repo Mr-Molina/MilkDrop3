@@ -14,7 +14,7 @@ pub struct DeviceInfo {
     pub is_default: bool,
 }
 
-#[allow(dead_code)]
+#[cfg(not(target_os = "linux"))]
 fn unavailable<T>() -> Result<T, AudioError> {
     Err(AudioError::Backend(
         "no loopback backend on this platform".into(),
@@ -22,18 +22,7 @@ fn unavailable<T>() -> Result<T, AudioError> {
 }
 
 #[cfg(target_os = "linux")]
-mod platform {
-    use super::*;
-    pub fn default_loopback() -> Result<Box<dyn AudioSource>, AudioError> {
-        unavailable()
-    }
-    pub fn list_devices() -> Result<Vec<DeviceInfo>, AudioError> {
-        unavailable()
-    }
-    pub fn open_device(_name: &str) -> Result<Box<dyn AudioSource>, AudioError> {
-        unavailable()
-    }
-}
+use crate::linux_pulse as platform;
 
 #[cfg(target_os = "macos")]
 mod platform {
@@ -78,7 +67,7 @@ pub fn open_device(name: &str) -> Result<Box<dyn AudioSource>, AudioError> {
     platform::open_device(name)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "linux")))]
 mod tests {
     use super::*;
 

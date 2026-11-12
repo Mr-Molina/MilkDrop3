@@ -15,5 +15,9 @@ all = { level = "warn", priority = -1 }
 hound.workspace = true
 thiserror.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libpulse-binding.workspace = true
+libpulse-simple-binding.workspace = true
+
 [dev-dependencies]
 md-analysis = { path = "../md-analysis" }

@@ -2,6 +2,8 @@
 #![deny(unsafe_code)]
 
 mod error;
+#[cfg(target_os = "linux")]
+mod linux_pulse;
 mod loopback;
 mod resample;
 mod silence;
