@@ -204,3 +204,7 @@ Task 4.1: minor (deferred): expansion overwrites argument token positions with t
 Task 4.1: fix round 1/5 (1 addressed [hide-sets; depth cap], 1 open — token budget per segment, not per input; commits 12dbf39..b6f604d). Fix round 2 dispatched.
 Task 4.1: fix round 2/5 (interleaved-segment attack addressed; new open: argument-substitution clones uncharged → OOM via F(D17) with 300-use body; commits 323cb57..d91a93a). Fix round 3 dispatched.
 Task 4.1: fix round 3/5 (argument-substitution charging addressed; open: budget counts tokens not bytes — long identifiers deep-cloned → GB RSS; MAX_DEPTH lost its dedicated test; O(params×body) lookup; commits a354ad1..a635f33). Fix round 4 dispatched to a fresh implementer on a more capable model.
+Task 4.1: fix round 4/5 (3 addressed, 0 open; commits ccf81ea..93526f5) — identifiers/literals capped at 256 chars (MAX_TOKEN_LEN; corpus max 32), Ident(Arc<str>), memory ≈ MAX_TOKENS×40 B, HashMap param lookup, depth-cap test restored.
+Task 4.1: Note (binds Task 4.2): match identifiers via Token::ident() / &*s — TokKind::Ident holds Arc<str>.
+Task 4.1: minor (deferred): skip_int_suffix accepts any run of u/U/l/L.
+Task 4.1: complete (commits 3673c61..e1c0b05 + fixes b6f604d, d91a93a, a635f33, 93526f5; review clean after 4 fix rounds)
