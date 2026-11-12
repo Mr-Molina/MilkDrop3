@@ -179,3 +179,7 @@ Task 3.6: Ruling: TimeoutSource is non-generic (`TimeoutSource::new<S: AudioSour
 Task 3.3: Note: DeviceInfo { name, description, is_default }; loopback.rs holds per-OS stub `platform` modules that 3.4/3.5 replace.
 Tasks 3.3/3.6: fix round 1/5 dispatched (Important: inner-source panic swallowed into permanent Silence). Ruling: minors 2-4 (checked_add deadline, vacuous analyzer assertion, missing resampler/format edge tests) folded into the same round — cheap and they close the reviewer's unproven risks — cost if wrong: slightly larger fix diff.
 Tasks 3.3/3.6: minor (deferred): Drop hangs if an inner source ignores its timeout (3.4/3.5 backends must honour 20 ms); three identical platform stub modules; prefetch makes live frames up to one frame stale; 3.3 no RED run.
+Tasks 3.3/3.6: fix round 1/5 (4 addressed, 0 open; commits dec6b5a..5b4a29e)
+Tasks 3.3/3.6: Note: catch_unwind is a no-op under panic=abort — keep release profiles on unwind (or accept that an audio-thread panic aborts).
+Task 3.3: complete (commits c0e46c4..d97db11 + fix 5b4a29e, review clean after 1 fix round)
+Task 3.6: complete (commits d97db11..92b980c + fix 5b4a29e, review clean after 1 fix round)
