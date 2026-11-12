@@ -674,20 +674,20 @@ Output contract (consumed by Milestone 5): one WGSL module with `@fragment fn fs
 **Files:**
 - Create: `crates/md-hlsl/tests/corpus.rs`, `crates/md-hlsl/examples/triage.rs`
 
-- [ ] **Step 1:** Write test `every_corpus_shader_translates_and_validates`: for each preset with `warp_shader` or `comp_shader` non-empty, `translate` succeeds; failures are collected and the test prints a table `preset | shader | line:col | message` before asserting the failure count is 0.
-- [ ] **Step 2:** Write `triage.rs`: same loop, groups failures by message prefix, prints counts descending. Run `cargo run -p md-hlsl --example triage`.
-- [ ] **Step 3:** Iterate on Tasks 4.3, 4.4, 4.7 until the corpus test passes at 100%. Each fix gets its own commit naming the preset that exposed it.
-- [ ] **Step 4:** Run `cargo test -p md-hlsl --test corpus`. Expected: PASS.
-- [ ] **Step 5:** Commit: `test(hlsl): corpus translation at 100%`
+- [x] **Step 1:** Write test `every_corpus_shader_translates_and_validates`: for each preset with `warp_shader` or `comp_shader` non-empty, `translate` succeeds; failures are collected and the test prints a table `preset | shader | line:col | message` before asserting the failure count is 0.
+- [x] **Step 2:** Write `triage.rs`: same loop, groups failures by message prefix, prints counts descending. Run `cargo run -p md-hlsl --example triage`.
+- [x] **Step 3:** Iterate on Tasks 4.3, 4.4, 4.7 until the corpus test passes at 100%. Each fix gets its own commit naming the preset that exposed it.
+- [x] **Step 4:** Run `cargo test -p md-hlsl --test corpus`. Expected: PASS.
+- [x] **Step 5:** Commit: `test(hlsl): corpus translation at 100%`
 
 ### Task 4.10: Translator fuzzing
 
 **Files:**
 - Create: `crates/md-hlsl/fuzz/` target `translate_never_panics`
 
-- [ ] **Step 1:** Write the target: arbitrary string -> `translate` for both kinds; must return `Ok` or `Err`, never panic, within 200 ms.
-- [ ] **Step 2:** Run `cargo +nightly fuzz run translate_never_panics -- -max_total_time=120` locally. Expected: no crashes; fix any found.
-- [ ] **Step 3:** Commit: `test(hlsl): fuzz target`
+- [x] **Step 1:** Write the target: arbitrary string -> `translate` for both kinds; must return `Ok` or `Err`, never panic, within 200 ms.
+- [x] **Step 2:** Run `cargo +nightly fuzz run translate_never_panics -- -max_total_time=120` locally. Expected: no crashes; fix any found.
+- [x] **Step 3:** Commit: `test(hlsl): fuzz target`
 
 ## Milestone 5: `md-text` and the `md-render` foundation
 
