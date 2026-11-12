@@ -293,3 +293,7 @@ Task 5.5: Note (binds 5.7): comp pipelines currently target the main-texture for
 Task 5.5: fix round 1/5 dispatched (Important: white→black fallback; translator fingerprint in cache key). Folded in: unique temp names + stale sweep; re-translate on create_module rejection of a disk hit.
 Task 5.5: Note (binds Milestone 7): F44's ShaderLoader trait is deferred to md-core; load_preset compiles both shaders in one call.
 Task 5.5: minor (deferred): no tests for the InvAlpha flip pipeline, randNN texsize by slot / failed rand pick, or dims-mismatch fallback.
+Task 5.5: fix round 1/5 (2 Important addressed; folded item 3 functionally addressed; commits 4d48856..97f625d)
+Task 5.5: parked — create_module-rejection-of-disk-hit path has no test — Ruling: code stands; no input is known that passes naga yet fails wgpu create_module, so the path cannot be exercised without a test hook — cost if wrong: an untested recovery path.
+Task 5.5: Note: plan lines ~770 and ~932 ("fallback 1x1 white texture") are superseded by the black-fallback ruling (also binds Task 6.8 sprites); stale doc text in shader_cache.rs encode comment ("cache 1").
+Task 5.5: complete (commits 1dd201a..9bda08e + fix 97f625d, review clean after 1 fix round)
