@@ -13,7 +13,8 @@ block layouts documented here.
 | `blur1_ps.wgsl` | `data/blur1_ps.fx` | `fs_main` |
 | `blur2_ps.wgsl` | `data/blur2_ps.fx` | `fs_main` |
 | `fixed_color.wgsl` | D3D9 fixed function: diffuse only | `vs_main`, `fs_main` |
-| `fixed_tex_modulate.wgsl` | D3D9 fixed function: texture × diffuse | `vs_main`, `fs_main` |
+| `fixed_tex_modulate.wgsl` | D3D9 fixed function: rgb texture × diffuse, alpha diffuse | `vs_main`, `fs_main` |
+| `fixed_tex_modulate_alpha.wgsl` | D3D9 fixed function: rgba texture × diffuse (sprite mode 4) | `vs_main`, `fs_main` |
 | `fixed_tex_select.wgsl` | D3D9 fixed function: texture only | `vs_main`, `fs_main` |
 | `text.wgsl` | glyph-atlas text (Task 6.6 may adjust) | `vs_main`, `fs_main` |
 | `title.wgsl` | song-title texture (Task 6.7 may adjust) | `vs_main`, `fs_main` |
@@ -49,7 +50,9 @@ building a `Vertex`. `uv.xy` holds the texture coordinates of `MYVERTEX`
 
 D3D9 clip space and wgpu clip space agree: x right, y up, z in `0..1`,
 viewport y down. Texture `v` grows downwards in both. So no shader flips
-anything; vertex data built as in the C++ renders identically. `blur_vs`
+anything. md-render builds **all** vertex data exactly as the C++ does
+(including its own half-texel UV biases and position offsets); the only
+correction is the rasterization shift below. `blur_vs`
 keeps the C++'s `z = 1`, which wgpu's `0 <= z <= w` clipping accepts
 (depth testing is off for every built-in pass).
 
@@ -66,8 +69,8 @@ shader contract (Milestone 4 intro: `U` at (0,0), `T` at (0,1),
 |---|---|---|---|---|
 | `warp_vs`, `comp_vs` | (preset `U`; `T` at (0,1)) | `vs_params: VsParams` (VS) | (preset textures) | |
 | `blur_vs` + `blur1_ps` / `blur2_ps` | `blur: BlurUniforms` (FS) | `vs_params: VsParams` (VS) | `tex_main: texture_2d<f32>` | `samp_main: sampler` |
-| `fixed_color` | none | none | none | none |
-| `fixed_tex_modulate`, `fixed_tex_select`, `text`, `title` | | `vs_params: VsParams` (VS) | `tex: texture_2d<f32>` | `samp: sampler` |
+| `fixed_color` | | `vs_params: VsParams` (VS) | | |
+| `fixed_tex_modulate`, `fixed_tex_modulate_alpha`, `fixed_tex_select`, `text`, `title` | | `vs_params: VsParams` (VS) | `tex: texture_2d<f32>` | `samp: sampler` |
 
 `VsParams` sits at binding 2 (`md_hlsl::layout::BUILTIN_VS_PARAMS_BINDING`)
 so that it never collides with the preset fragment shader's `U`/`T` when
@@ -77,8 +80,8 @@ so that it never collides with the preset fragment shader's `U`/`T` when
 
 | Field | Type | Offset | Value |
 |---|---|---|---|
-| `texel_size` | `vec2<f32>` | 0 | signed UV step per render-target pixel (see below); `(0, 0)` disables the shift |
-| `half_texel` | `f32` | 8 | `md_hlsl::layout::D3D9_HALF_TEXEL` (`-0.5`) |
+| `texel_size` | `vec2<f32>` | 0 | `(1/W, 1/H)` of the W×H render target being drawn (unsigned) |
+| `pixel_shift` | `f32` | 8 | `md_hlsl::layout::D3D9_PIXEL_SHIFT` (`0.5`); 0 disables the shift |
 | `pad` | `f32` | 12 | 0 |
 
 ### `BlurUniforms` (112 bytes, `md_hlsl::layout::BLUR_UNIFORMS_SIZE`)
@@ -115,37 +118,59 @@ The source sampler is linear min/mag/mip with clamp addressing
 triangle strip, i.e. **v = 0 at the bottom**: every pass flips vertically,
 and the pairs cancel (blur1..3 come out upright), as in the C++.
 
-## D3D9 half-texel emulation (F29)
+## D3D9 rasterization emulation (F29)
 
-D3D9 samples a pixel at its integer screen coordinate; wgpu at the pixel
-centre (+0.5 px). A texture coordinate interpolated across the screen is
-therefore half a pixel further along under wgpu. Every textured built-in VS
-corrects this by adding `half_texel * texel_size` to the UVs it outputs,
-where `texel_size` is the signed UV change per render-target pixel. The
-constant's single source of truth is `md_hlsl::layout::D3D9_HALF_TEXEL`;
-the WGSL never hard-codes it. Only texture coordinates are shifted (not
-`rad_ang` or colours). What md-render passes:
+D3D9 samples pixel `i` at screen coordinate `i`; wgpu samples it at the
+pixel centre `i + 0.5`. Every built-in vertex shader therefore moves its
+clip-space position half a pixel right and down, in the shared helper
 
-| Pass | C++ alignment | Shifted | `texel_size` |
-|---|---|---|---|
-| warp (`warp_vs`) | `+0.5/texsize` on `tu,tv` (milkdropfs.cpp:1835-1837) and `tu_orig,tv_orig` (plugin.cpp:2299-2300) | `uv.xyzw` | `(1/texsize_x, 1/texsize_y)` |
-| comp (`comp_vs`) | grid positions moved by `-0.5` px (plugin.cpp:2041-2058) | `uv.xy` (`.zw` output is 0) | `(1/window_w, 1/window_h)` |
-| blur (`blur_vs`) | none (quad 0..1, milkdropfs.cpp:1542-1562) | `uv.xy` | `(1/dst_w, -1/dst_h)` (v runs bottom-up) |
-| sprites / fixed textured draws | quad extended by one pixel (milkdropfs.cpp:4004-4016) | `uv.xy` | `(1/target_w, 1/target_h)`, or 0 to disable |
-| text / title | md-render (6.6, 6.7) decides | `uv.xy` | 0 for pixel-aligned glyph quads |
+```wgsl
+fn d3d9_raster(clip: vec4<f32>) -> vec4<f32> {
+    let s = 2.0 * vs_params.pixel_shift * vec2<f32>(vs_params.texel_size.x, -vs_params.texel_size.y);
+    return vec4<f32>(clip.xy + s * clip.w, clip.zw);
+}
+```
 
-The warp correction is exact where the warp mesh is locally an identity
-mapping (one texel per pixel), which is the case the C++ offset targets.
+i.e. `clip.xy += (+1/W, -1/H) * clip.w` with `pixel_shift = 0.5` (NDC
+`(+1/W, -1/H)` for the built-ins' `clip.w = 1`; the `* clip.w` keeps it a
+fixed screen-space shift for any `w`). The value at wgpu's pixel centre of
+every interpolated attribute (UVs, colour, `rad_ang`) is then exactly the
+value D3D9 gave that pixel, and coverage matches too. The single source of
+truth for the shift is `md_hlsl::layout::D3D9_PIXEL_SHIFT`; md-render writes
+it into `VsParams.pixel_shift`. `texel_size` is always the **target**'s
+`(1/W, 1/H)`:
+
+| Pass | Target (`texel_size`) | What the C++ vertex data already contains (md-render keeps it) |
+|---|---|---|
+| warp (`warp_vs`) | warp texture, `1/texsize` | `+0.5/texsize` on `tu,tv` (milkdropfs.cpp:1835-1837) and `tu_orig,tv_orig` (plugin.cpp:2299-2300) |
+| comp (`comp_vs`) | window / back buffer | grid positions `sx = (u - 0.5/W)*2 - 1`, `sy = -((v - 0.5/H)*2 - 1)` (plugin.cpp:2041-2058) |
+| blur (`blur_vs`) | the blur texture written | fullscreen quad, v = 0 at the bottom (milkdropfs.cpp:1542-1562); the source texel size for the sampling offsets is `BlurUniforms._c0` |
+| sprites, video echo, shapes, waves, text, title | the target drawn to | as built by the C++ (see below) |
+
+Fixed-function draws build their UVs exactly as the C++ does, per quad:
+`ShowToUser_NoShaders` (milkdropfs.cpp:4004-4120) extends the quad by one
+pixel, maps v bottom-up (`v3[0]` at the top gets `tv = temp_hi`), scales UVs
+by `1/fZoom` around 0.5 (`temp_lo/hi = 0.5 ∓ 0.5/fZoom`) and flips u/v by
+`nVideoEchoOrientation` on the echo pass; sprites (milkdropfs.cpp:3600-3640)
+use `±0.5` corners times `repeatx/repeaty` plus 0.5. md-render reproduces
+those vertex values; the shaders add nothing but the raster shift.
 
 ## Fixed-function equivalents
 
+The C++'s standard texture stage state is COLOROP `MODULATE(DIFFUSE,
+TEXTURE)` with ALPHAOP `SELECTARG1 DIFFUSE` (milkdropfs.cpp:923-929,
+1898-1904, 3448-3454, 3770-3776, 3991-3997; pluginshell.cpp:1790-1797).
+Only sprite blend mode 4 (colour-keyed) uses ALPHAOP `MODULATE`
+(milkdropfs.cpp:3714-3721).
+
 | File | D3D9 texture stage 0 | Output |
 |---|---|---|
-| `fixed_color` | `COLOROP`/`ALPHAOP` `SELECTARG1`, `ARG1 = DIFFUSE` | vertex colour |
-| `fixed_tex_modulate` | `COLOROP`/`ALPHAOP` `MODULATE`, `TEXTURE` × `DIFFUSE` | `texture * colour` (rgba) |
-| `fixed_tex_select` | `COLOROP`/`ALPHAOP` `SELECTARG1`, `ARG1 = TEXTURE` | `texture` |
+| `fixed_color` | no texture (`SELECTARG1 DIFFUSE`, e.g. pluginshell.cpp:1832-1836) | vertex colour |
+| `fixed_tex_modulate` | standard state above | `(texture.rgb * colour.rgb, colour.a)` |
+| `fixed_tex_modulate_alpha` | sprite mode 4: COLOROP and ALPHAOP `MODULATE(DIFFUSE, TEXTURE)` | `texture * colour` (rgba) |
+| `fixed_tex_select` | `SELECTARG1 TEXTURE` — no C++ draw uses it (every `SELECTARG1` in milkdropfs.cpp/pluginshell.cpp selects `DIFFUSE`); kept for md-render's own copies (`FixedMode::TexSelect`) | `texture` |
 | `text` | glyph atlas (`md-text`, RGBA8, coverage in `.a`) | `(colour.rgb, colour.a * atlas.a)` |
-| `title` | `MODULATE`, drawn additively (milkdropfs.cpp:4477ff) | `texture * colour` (rgba) |
+| `title` | none set in `ShowSongTitleAnim` (milkdropfs.cpp:4477ff), so the standard state; blend ONE/ONE (4492-4494) | `(texture.rgb * colour.rgb, colour.a)` |
 
 Blend state, topology and the fan/point conversions are pipeline state
 chosen by md-render (Task 5.3), not part of these shaders.

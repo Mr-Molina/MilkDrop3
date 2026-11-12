@@ -11,20 +11,31 @@
 // comp fragment shader never reads (its `_uv` parameter is float2), so .zw
 // is written as 0.
 //
-// D3D9 and wgpu share clip space and top-down texture v: nothing flips.
-// Half-texel (F29): plugin.cpp:2041-2058 shifts the comp grid positions by
-// -0.5 pixel so D3D9's integer pixel centres sample texel centres; under
-// wgpu's +0.5 pixel centres that grid samples one half texel too far, so
-// the UVs are shifted by `half_texel * texel_size`
-// (half_texel = md_hlsl::layout::D3D9_HALF_TEXEL, texel_size = 1 / window size).
+// D3D9 and wgpu share clip space (x right, y up, z in 0..1) and top-down
+// texture v, so nothing is flipped. The position goes through d3d9_raster
+// (VsParams.texel_size = 1 / target size), so every attribute -- including
+// the C++'s own half-texel UV biases, which md-render keeps in the vertex
+// data -- interpolates exactly as under D3D9.
+// Target: the window/back buffer. The comp grid keeps the C++'s -0.5 px
+// position bias (plugin.cpp:2041-2058); with the +0.5 px raster shift it
+// covers the target exactly as under D3D9.
 
 struct VsParams {
     texel_size: vec2<f32>,
-    half_texel: f32,
+    pixel_shift: f32,
     pad: f32,
 }
 
 @group(0) @binding(2) var<uniform> vs_params: VsParams;
+
+// D3D9 rasterization (F29): D3D9 samples pixel i at screen coordinate i,
+// wgpu at i + 0.5, so the clip-space position moves right/down by
+// `pixel_shift` (= md_hlsl::layout::D3D9_PIXEL_SHIFT = 0.5) target pixels:
+// clip.xy += 2 * pixel_shift * (1/W, -1/H) * clip.w.
+fn d3d9_raster(clip: vec4<f32>) -> vec4<f32> {
+    let s = 2.0 * vs_params.pixel_shift * vec2<f32>(vs_params.texel_size.x, -vs_params.texel_size.y);
+    return vec4<f32>(clip.xy + s * clip.w, clip.zw);
+}
 
 struct VsIn {
     @location(0) pos: vec3<f32>,
@@ -42,11 +53,10 @@ struct VsOut {
 
 @vertex
 fn vs_main(v: VsIn) -> VsOut {
-    let off = vs_params.half_texel * vs_params.texel_size;
     var o: VsOut;
-    o.pos = vec4<f32>(v.pos.x, v.pos.y, v.pos.z, 1.0);
+    o.pos = d3d9_raster(vec4<f32>(v.pos.x, v.pos.y, v.pos.z, 1.0));
     o.diffuse = v.color;
-    o.uv = vec4<f32>(v.uv.xy + off, 0.0, 0.0);
+    o.uv = vec4<f32>(v.uv.xy, 0.0, 0.0);
     o.rad_ang = v.rad_ang.xy;
     return o;
 }

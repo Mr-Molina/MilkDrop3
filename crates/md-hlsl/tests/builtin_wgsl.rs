@@ -4,17 +4,20 @@
 //! read the single Task 5.2 `Vertex` layout (F30); `warp_vs`/`comp_vs` must
 //! produce exactly the `VsOut` a translated preset fragment shader reads;
 //! the blur and parameter blocks must have the sizes/offsets
-//! `md_hlsl::layout` publishes for md-render.
+//! `md_hlsl::layout` publishes for md-render; every vertex shader must apply
+//! the D3D9 rasterization shift (F29, round-1 ruling: +0.5 px position).
 
 mod common;
 
 use common::asset;
-use md_hlsl::layout::{BLUR_UNIFORMS_SIZE, BUILTIN_VS_PARAMS_BINDING, BUILTIN_VS_PARAMS_SIZE};
+use md_hlsl::layout::{
+    BLUR_UNIFORMS_SIZE, BUILTIN_VS_PARAMS_BINDING, BUILTIN_VS_PARAMS_SIZE, D3D9_PIXEL_SHIFT,
+};
 use md_hlsl::{translate, PsVersion, ShaderInput, ShaderKind};
 use naga::{Binding, BuiltIn, Module, ShaderStage, TypeInner, VectorSize};
 
 /// Every file Task 4.8 creates.
-const FILES: [&str; 10] = [
+const FILES: [&str; 11] = [
     "warp_vs.wgsl",
     "comp_vs.wgsl",
     "blur_vs.wgsl",
@@ -22,10 +25,31 @@ const FILES: [&str; 10] = [
     "blur2_ps.wgsl",
     "fixed_color.wgsl",
     "fixed_tex_modulate.wgsl",
+    "fixed_tex_modulate_alpha.wgsl",
     "fixed_tex_select.wgsl",
     "text.wgsl",
     "title.wgsl",
 ];
+
+/// The files with a vertex entry point.
+const VERTEX_FILES: [&str; 9] = [
+    "warp_vs.wgsl",
+    "comp_vs.wgsl",
+    "blur_vs.wgsl",
+    "fixed_color.wgsl",
+    "fixed_tex_modulate.wgsl",
+    "fixed_tex_modulate_alpha.wgsl",
+    "fixed_tex_select.wgsl",
+    "text.wgsl",
+    "title.wgsl",
+];
+
+/// The position shift every vertex shader carries, verbatim; mirrored on
+/// the CPU by [`d3d9_raster`].
+const RASTER_FN: &str = "fn d3d9_raster(clip: vec4<f32>) -> vec4<f32> {
+    let s = 2.0 * vs_params.pixel_shift * vec2<f32>(vs_params.texel_size.x, -vs_params.texel_size.y);
+    return vec4<f32>(clip.xy + s * clip.w, clip.zw);
+}";
 
 fn shader_dir() -> String {
     format!("{}/../../assets/shaders", env!("CARGO_MANIFEST_DIR"))
@@ -231,6 +255,10 @@ fn vertex_outputs_feed_their_fragment_shaders() {
         ("blur_vs.wgsl", "blur2_ps.wgsl"),
         ("fixed_color.wgsl", "fixed_color.wgsl"),
         ("fixed_tex_modulate.wgsl", "fixed_tex_modulate.wgsl"),
+        (
+            "fixed_tex_modulate_alpha.wgsl",
+            "fixed_tex_modulate_alpha.wgsl",
+        ),
         ("fixed_tex_select.wgsl", "fixed_tex_select.wgsl"),
         ("text.wgsl", "text.wgsl"),
         ("title.wgsl", "title.wgsl"),
@@ -254,15 +282,7 @@ fn builtin_vertex_params_do_not_collide_with_preset_bindings() {
     // Preset fragment shaders use (0,0) MdUniforms, (0,1) TexSizes and
     // group 1 for textures; the built-in VS block sits at (0, 2).
     let preset = resources(&translated(ShaderKind::Warp, "warp_ps.fx"));
-    for vs in [
-        "warp_vs.wgsl",
-        "comp_vs.wgsl",
-        "blur_vs.wgsl",
-        "fixed_tex_modulate.wgsl",
-        "fixed_tex_select.wgsl",
-        "text.wgsl",
-        "title.wgsl",
-    ] {
+    for vs in VERTEX_FILES {
         let m = module(vs);
         let r = resources(&m);
         assert!(
@@ -278,12 +298,15 @@ fn builtin_vertex_params_do_not_collide_with_preset_bindings() {
             offs,
             [
                 ("texel_size".into(), 0),
-                ("half_texel".into(), 8),
+                ("pixel_shift".into(), 8),
                 ("pad".into(), 12)
             ]
         );
     }
-    assert!(resources(&module("fixed_color.wgsl")).is_empty());
+    assert_eq!(
+        resources(&module("fixed_color.wgsl")),
+        [(0, BUILTIN_VS_PARAMS_BINDING, "vs_params".to_string())]
+    );
 }
 
 #[test]
@@ -310,6 +333,7 @@ fn blur_uniform_block_mirrors_constant_registers() {
 fn textured_fixed_passes_bind_one_texture_in_group_1() {
     for f in [
         "fixed_tex_modulate.wgsl",
+        "fixed_tex_modulate_alpha.wgsl",
         "fixed_tex_select.wgsl",
         "text.wgsl",
         "title.wgsl",
@@ -319,4 +343,146 @@ fn textured_fixed_passes_bind_one_texture_in_group_1() {
         assert!(r.contains(&(1, 1, "samp".to_string())), "{f}: {r:?}");
         assert_eq!(r.len(), 3, "{f}: {r:?}");
     }
+}
+
+#[test]
+fn every_vertex_shader_applies_the_d3d9_raster_shift() {
+    for f in VERTEX_FILES {
+        assert!(source(f).contains(RASTER_FN), "{f}: d3d9_raster differs");
+        let m = module(f);
+        let ep = entry(&m, ShaderStage::Vertex);
+        let calls = ep
+            .function
+            .body
+            .iter()
+            .filter(|s| {
+                matches!(s, naga::Statement::Call { function, .. }
+                    if m.functions[*function].name.as_deref() == Some("d3d9_raster"))
+            })
+            .count();
+        assert_eq!(calls, 1, "{f}: vs_main must call d3d9_raster once");
+    }
+    // Every vertex shader is listed; the others have no vertex stage.
+    for f in FILES {
+        let has_vs = module(f)
+            .entry_points
+            .iter()
+            .any(|e| e.stage == ShaderStage::Vertex);
+        assert_eq!(has_vs, VERTEX_FILES.contains(&f), "{f}");
+    }
+}
+
+/// A 2-vector (NDC, screen or UV).
+type V2 = [f32; 2];
+
+/// CPU mirror of the WGSL `d3d9_raster` ([`RASTER_FN`]).
+fn d3d9_raster(clip: [f32; 4], texel_size: [f32; 2], pixel_shift: f32) -> [f32; 4] {
+    let s = [
+        2.0 * pixel_shift * texel_size[0],
+        2.0 * pixel_shift * -texel_size[1],
+    ];
+    [
+        clip[0] + s[0] * clip[3],
+        clip[1] + s[1] * clip[3],
+        clip[2],
+        clip[3],
+    ]
+}
+
+/// Viewport transform (identical in D3D9 and wgpu): NDC -> screen pixels,
+/// y down.
+fn screen(ndc: [f32; 2], w: f32, h: f32) -> [f32; 2] {
+    [(ndc[0] + 1.0) * 0.5 * w, (1.0 - ndc[1]) * 0.5 * h]
+}
+
+/// Attribute of an axis-aligned quad with screen corners `s0` (attr `a0`)
+/// and `s1` (attr `a1`), linearly interpolated at screen point `p`; `None`
+/// when `p` lies outside the quad (not covered).
+fn sample(s0: [f32; 2], s1: [f32; 2], a0: [f32; 2], a1: [f32; 2], p: [f32; 2]) -> Option<[f32; 2]> {
+    let mut out = [0.0; 2];
+    for k in 0..2 {
+        let (lo, hi) = (s0[k].min(s1[k]), s0[k].max(s1[k]));
+        if p[k] < lo || p[k] >= hi {
+            return None;
+        }
+        out[k] = a0[k] + (p[k] - s0[k]) / (s1[k] - s0[k]) * (a1[k] - a0[k]);
+    }
+    Some(out)
+}
+
+#[test]
+fn raster_shift_reproduces_d3d9_sampling_on_a_4x4_target() {
+    let (w, h) = (4.0_f32, 4.0_f32);
+    let texel = [1.0 / w, 1.0 / h];
+    // A shifted vertex lands +0.5 px right and down on screen.
+    let p = d3d9_raster([-1.0, 1.0, 0.0, 1.0], texel, D3D9_PIXEL_SHIFT);
+    assert_eq!(screen([p[0], p[1]], w, h), [0.5, 0.5]);
+    // With w != 1 the shift still moves NDC by (+1/W, -1/H).
+    let q = d3d9_raster([-2.0, 2.0, 0.0, 2.0], texel, D3D9_PIXEL_SHIFT);
+    assert_eq!([q[0] / q[3], q[1] / q[3]], [-1.0 + 1.0 / w, 1.0 - 1.0 / h]);
+
+    // Quads built as the C++ builds them: (NDC corners, UV corners).
+    let hx = 0.5 / w;
+    let hy = 0.5 / h;
+    let cases: [(&str, V2, V2, V2, V2); 3] = [
+        // warp mesh: uv = ndc mapped to 0..1 plus the C++'s +0.5 texel.
+        (
+            "warp",
+            [-1.0, 1.0],
+            [1.0, -1.0],
+            [hx, hy],
+            [1.0 + hx, 1.0 + hy],
+        ),
+        // comp grid: sx = (u - 0.5/W)*2 - 1, sy = -((v - 0.5/H)*2 - 1).
+        (
+            "comp",
+            [(0.0 - hx) * 2.0 - 1.0, -((0.0 - hy) * 2.0 - 1.0)],
+            [(1.0 - hx) * 2.0 - 1.0, -((1.0 - hy) * 2.0 - 1.0)],
+            [0.0, 0.0],
+            [1.0, 1.0],
+        ),
+        // blur quad: v = 0 at the bottom edge.
+        ("blur", [-1.0, -1.0], [1.0, 1.0], [0.0, 0.0], [1.0, 1.0]),
+    ];
+    for (name, n0, n1, a0, a1) in cases {
+        let d3d = (screen(n0, w, h), screen(n1, w, h));
+        let s0 = d3d9_raster([n0[0], n0[1], 0.0, 1.0], texel, D3D9_PIXEL_SHIFT);
+        let s1 = d3d9_raster([n1[0], n1[1], 0.0, 1.0], texel, D3D9_PIXEL_SHIFT);
+        let wg = (screen([s0[0], s0[1]], w, h), screen([s1[0], s1[1]], w, h));
+        for j in 0..4 {
+            for i in 0..4 {
+                // D3D9 samples pixel (i, j) at (i, j); wgpu at (i+.5, j+.5).
+                let (x, y) = (i as f32, j as f32);
+                let want = sample(d3d.0, d3d.1, a0, a1, [x, y]);
+                let got = sample(wg.0, wg.1, a0, a1, [x + 0.5, y + 0.5]);
+                assert_eq!(got, want, "{name} pixel ({i},{j})");
+            }
+        }
+    }
+    // The comp grid covers every pixel (incl. the last column/row) in both.
+    let n0 = [(0.0 - hx) * 2.0 - 1.0, -((0.0 - hy) * 2.0 - 1.0)];
+    let n1 = [(1.0 - hx) * 2.0 - 1.0, -((1.0 - hy) * 2.0 - 1.0)];
+    let s0 = d3d9_raster([n0[0], n0[1], 0.0, 1.0], texel, D3D9_PIXEL_SHIFT);
+    let s1 = d3d9_raster([n1[0], n1[1], 0.0, 1.0], texel, D3D9_PIXEL_SHIFT);
+    let (a, b) = (screen([s0[0], s0[1]], w, h), screen([s1[0], s1[1]], w, h));
+    assert_eq!(
+        sample(a, b, [0.0; 2], [1.0; 2], [3.5, 3.5]),
+        Some([0.875, 0.875])
+    );
+}
+
+#[test]
+fn fixed_function_alpha_ops_match_the_cpp_stage_states() {
+    // COLOROP MODULATE(DIFFUSE, TEXTURE), ALPHAOP SELECTARG1 DIFFUSE.
+    for f in ["fixed_tex_modulate.wgsl", "title.wgsl"] {
+        assert!(
+            source(f).contains("return vec4<f32>(t.rgb * in.color.rgb, in.color.a);"),
+            "{f}"
+        );
+    }
+    // Sprite mode 4: ALPHAOP MODULATE(DIFFUSE, TEXTURE).
+    assert!(source("fixed_tex_modulate_alpha.wgsl")
+        .contains("return textureSample(tex, samp, in.uv) * in.color;"));
+    assert!(source("fixed_tex_select.wgsl").contains("return textureSample(tex, samp, in.uv);"));
+    assert!(source("fixed_color.wgsl").contains("return in.color;"));
 }

@@ -8,21 +8,28 @@
 //   _rad_ang  = rad_ang_in.xy;
 //
 // D3D9 and wgpu share clip space (x right, y up, z in 0..1) and top-down
-// texture v, so nothing is flipped. The only change is the D3D9 half-texel
-// emulation (F29): the C++ adds +0.5 texel to both the warped UVs
-// (milkdropfs.cpp:1835-1837) and the orig UVs (plugin.cpp:2299-2300) to
-// hit texel centres under D3D9's integer pixel centres; wgpu samples at
-// pixel centres (+0.5 px), so both UV pairs are shifted by
-// `half_texel * texel_size` (half_texel = md_hlsl::layout::D3D9_HALF_TEXEL,
-// texel_size = 1 / warp target size).
+// texture v, so nothing is flipped. The position goes through d3d9_raster
+// (VsParams.texel_size = 1 / target size), so every attribute -- including
+// the C++'s own half-texel UV biases, which md-render keeps in the vertex
+// data -- interpolates exactly as under D3D9.
+// Target: the warp render target (texsize).
 
 struct VsParams {
     texel_size: vec2<f32>,
-    half_texel: f32,
+    pixel_shift: f32,
     pad: f32,
 }
 
 @group(0) @binding(2) var<uniform> vs_params: VsParams;
+
+// D3D9 rasterization (F29): D3D9 samples pixel i at screen coordinate i,
+// wgpu at i + 0.5, so the clip-space position moves right/down by
+// `pixel_shift` (= md_hlsl::layout::D3D9_PIXEL_SHIFT = 0.5) target pixels:
+// clip.xy += 2 * pixel_shift * (1/W, -1/H) * clip.w.
+fn d3d9_raster(clip: vec4<f32>) -> vec4<f32> {
+    let s = 2.0 * vs_params.pixel_shift * vec2<f32>(vs_params.texel_size.x, -vs_params.texel_size.y);
+    return vec4<f32>(clip.xy + s * clip.w, clip.zw);
+}
 
 struct VsIn {
     @location(0) pos: vec3<f32>,
@@ -40,11 +47,10 @@ struct VsOut {
 
 @vertex
 fn vs_main(v: VsIn) -> VsOut {
-    let off = vs_params.half_texel * vs_params.texel_size;
     var o: VsOut;
-    o.pos = vec4<f32>(v.pos.x, v.pos.y, v.pos.z, 1.0);
+    o.pos = d3d9_raster(vec4<f32>(v.pos.x, v.pos.y, v.pos.z, 1.0));
     o.diffuse = v.color;
-    o.uv = v.uv + vec4<f32>(off, off);
+    o.uv = v.uv.xyzw;
     o.rad_ang = v.rad_ang.xy;
     return o;
 }

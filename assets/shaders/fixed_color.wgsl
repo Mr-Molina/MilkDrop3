@@ -1,11 +1,28 @@
-// D3D9 fixed-function emulation, no texture: COLOROP/ALPHAOP SELECTARG1
-// with ARG1 = D3DTA_DIFFUSE, i.e. output = interpolated vertex colour.
-// Used for waveforms, untextured custom shapes, borders/motion vectors,
-// dark boxes (WFVERTEX draws).
+// D3D9 fixed-function emulation, no texture bound: output = interpolated
+// vertex colour (COLOROP/ALPHAOP SELECTARG1 DIFFUSE, e.g.
+// pluginshell.cpp:1832-1836; with no texture, MODULATE(DIFFUSE, TEXTURE)
+// also yields the diffuse colour). Used for waveforms, untextured custom
+// shapes, borders, motion vectors and dark boxes (WFVERTEX draws).
 //
-// No uniforms and no half-texel shift: there is no texture coordinate to
-// correct (D3D9 vs wgpu pixel-centre differences only move edges of
-// untextured geometry by half a pixel).
+// Bindings: @group(0) @binding(2) VsParams (D3D9 raster shift; texel_size =
+// 1 / target size, pixel_shift = md_hlsl::layout::D3D9_PIXEL_SHIFT).
+
+struct VsParams {
+    texel_size: vec2<f32>,
+    pixel_shift: f32,
+    pad: f32,
+}
+
+@group(0) @binding(2) var<uniform> vs_params: VsParams;
+
+// D3D9 rasterization (F29): D3D9 samples pixel i at screen coordinate i,
+// wgpu at i + 0.5, so the clip-space position moves right/down by
+// `pixel_shift` (= md_hlsl::layout::D3D9_PIXEL_SHIFT = 0.5) target pixels:
+// clip.xy += 2 * pixel_shift * (1/W, -1/H) * clip.w.
+fn d3d9_raster(clip: vec4<f32>) -> vec4<f32> {
+    let s = 2.0 * vs_params.pixel_shift * vec2<f32>(vs_params.texel_size.x, -vs_params.texel_size.y);
+    return vec4<f32>(clip.xy + s * clip.w, clip.zw);
+}
 
 struct VsIn {
     @location(0) pos: vec3<f32>,
@@ -22,7 +39,7 @@ struct FixedVsOut {
 @vertex
 fn vs_main(v: VsIn) -> FixedVsOut {
     var o: FixedVsOut;
-    o.pos = vec4<f32>(v.pos, 1.0);
+    o.pos = d3d9_raster(vec4<f32>(v.pos, 1.0));
     o.color = v.color;
     return o;
 }

@@ -83,7 +83,7 @@ fn md_uniforms_layout_matches_naga() {
     assert_eq!(md_uniform_offset("texsize_main"), None);
     assert_eq!(md_hlsl::layout::texsizes_size(0), 16);
     assert_eq!(md_hlsl::layout::texsizes_size(3), 48);
-    assert_eq!(md_hlsl::layout::D3D9_HALF_TEXEL, -0.5);
+    assert_eq!(md_hlsl::layout::D3D9_PIXEL_SHIFT, 0.5);
 }
 
 /// Every corpus shader (and the shipped defaults) through `translate`

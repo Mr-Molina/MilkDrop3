@@ -33,16 +33,25 @@ use crate::types::{Scalar, Ty};
 /// Size in bytes of the `MdUniforms` block.
 pub const MD_UNIFORMS_SIZE: u64 = 1920;
 
-/// The D3D9 half-texel offset (F29): built-in vertex shaders take
-/// `texel_size` in their uniforms and shift UVs by
-/// `D3D9_HALF_TEXEL * texel_size` so the feedback loop does not drift.
-pub const D3D9_HALF_TEXEL: f32 = -0.5;
+/// The D3D9 rasterization shift (F29, round-1 ruling), in render-target
+/// pixels: D3D9 samples pixel `i` at screen coordinate `i`, wgpu at
+/// `i + 0.5`, so every built-in vertex shader moves its clip-space position
+/// by `+D3D9_PIXEL_SHIFT` pixels right and down:
+///
+/// `clip.xy += 2 * pixel_shift * (texel_size.x, -texel_size.y) * clip.w`
+///
+/// with `texel_size = (1/W, 1/H)` of the W×H target, i.e. NDC `(+1/W, -1/H)`
+/// for `clip.w = 1`. Every interpolated attribute then takes at wgpu's
+/// pixel centre the value D3D9 gave that pixel, so vertex data is built
+/// exactly as the C++ builds it (including its own half-texel UV biases).
+pub const D3D9_PIXEL_SHIFT: f32 = 0.5;
 
-/// Binding (in group 0) of the `VsParams` block every textured built-in
-/// vertex shader in `assets/shaders/` reads (Task 4.8; `fixed_color` has none): `texel_size: vec2<f32>` at
-/// offset 0, `half_texel: f32` at 8 (fill with [`D3D9_HALF_TEXEL`]), `pad`
-/// at 12. Binding 2 so it never collides with the preset fragment shader's
-/// `U` (binding 0) and `T` (binding 1) in the same pipeline.
+/// Binding (in group 0) of the `VsParams` block every built-in vertex
+/// shader in `assets/shaders/` reads (Task 4.8): `texel_size: vec2<f32>`
+/// at offset 0 (the target's `1/W, 1/H`), `pixel_shift: f32` at 8 (fill
+/// with [`D3D9_PIXEL_SHIFT`]; 0 disables the shift), `pad` at 12. Binding 2
+/// so it never collides with the preset fragment shader's `U` (binding 0)
+/// and `T` (binding 1) in the same pipeline.
 pub const BUILTIN_VS_PARAMS_BINDING: u32 = 2;
 
 /// Size in bytes of the built-in `VsParams` block.
