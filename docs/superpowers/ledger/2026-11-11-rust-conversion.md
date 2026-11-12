@@ -185,3 +185,5 @@ Task 3.3: complete (commits c0e46c4..d97db11 + fix 5b4a29e, review clean after 1
 Task 3.6: complete (commits d97db11..92b980c + fix 5b4a29e, review clean after 1 fix round)
 Task 3.4: Ruling: libpulse-simple-binding pinned at 2.29.0 (2.30.1 doesn't exist); an unreachable-socket "Access" error before authorization maps to NoServer; open_device probes with an introspection connect first — cost if wrong: misleading error text in rare auth failures.
 Task 3.4: Note: real capture untested here (no server) — verify on a Linux desktop with `cargo run -p md-audio --example list_devices`; Simple::read has no timeout, so the pulse source's Drop is prompt only while the server delivers or errors (a stalled server could hang shutdown).
+Task 3.4: fix round 1/5 dispatched (Important: Drop joins a thread blocked in Simple::read → shutdown hang; Server drops mainloop before context → likely use-after-free). Ruling: NOAUTOSPAWN for probe/list folded in.
+Task 3.4: minor (deferred): Vec alloc under ring mutex per next_frame; eprintln! in library code; no unit tests for ring window/timeout/fresh/failed logic (inject a fake reader).
