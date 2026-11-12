@@ -82,9 +82,14 @@ impl Checker {
         let te = to.elem().unwrap();
         let truncated = |c: &mut Checker, e: &TExpr| {
             if implicit {
+                let what = if matches!(e.ty, Ty::Mat(..)) {
+                    "matrix"
+                } else {
+                    "vector"
+                };
                 c.warn(
                     e.pos,
-                    format!("implicit truncation of vector type ({} to {to})", e.ty),
+                    format!("implicit truncation of {what} type ({} to {to})", e.ty),
                 );
             }
         };

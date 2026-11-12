@@ -315,30 +315,28 @@ impl Checker {
 
     fn assign_tail(&mut self, pos: Pos, op: Option<BinOp>, l: TExpr, r: TExpr) -> R<TExpr> {
         let ty = l.ty.clone();
-        let (op, rhs) = match op {
+        let (op_ty, rhs) = match op {
             None => {
                 if ty.is_sampler() {
                     return err(pos, "samplers cannot be assigned");
                 }
-                (None, self.coerce(r, &ty)?)
+                (ty.clone(), self.coerce(r, &ty)?)
             }
             Some(bop) => {
                 let bin = self.binary_typed(pos, bop, l.clone(), r)?;
-                let TExprKind::Binary {
-                    lhs: bl, rhs: br, ..
-                } = &bin.kind
-                else {
+                let op_ty = bin.ty.clone();
+                let TExprKind::Binary { rhs: br, .. } = &bin.kind else {
                     unreachable!()
                 };
-                if **bl == l && bin.ty == ty {
-                    (Some(bop), (**br).clone())
-                } else {
-                    (None, self.coerce(bin, &ty)?)
-                }
+                let rhs = (**br).clone();
+                // Validate (and warn about) the conversion back to the lhs.
+                self.coerce(bin, &ty)?;
+                (op_ty, rhs)
             }
         };
         let kind = TExprKind::Assign {
             op,
+            op_ty,
             lhs: Box::new(l),
             rhs: Box::new(rhs),
         };
@@ -418,16 +416,21 @@ impl Checker {
         }
     }
 
-    /// Fails unless `e` is an assignable location.
-    pub(super) fn lvalue(&self, e: &TExpr) -> R<()> {
+    /// Fails unless `e` is an assignable location; records written
+    /// uniform globals.
+    pub(super) fn lvalue(&mut self, e: &TExpr) -> R<()> {
         match &e.kind {
             TExprKind::Var { name, origin } => match origin {
-                VarOrigin::Global(Storage::Uniform) => err(
-                    e.pos,
-                    format!(
-                        "cannot assign to '{name}': globals are uniform (read-only) unless static"
-                    ),
-                ),
+                VarOrigin::Global(Storage::Uniform) => {
+                    if e.ty.is_sampler() {
+                        return err(e.pos, format!("cannot assign to sampler '{name}'"));
+                    }
+                    if self.globals.get(name).is_some_and(|g| g.is_const) {
+                        return err(e.pos, format!("cannot assign to const '{name}'"));
+                    }
+                    self.written.insert(name.clone());
+                    Ok(())
+                }
                 VarOrigin::Global(Storage::Const) => {
                     err(e.pos, format!("cannot assign to const '{name}'"))
                 }

@@ -80,8 +80,14 @@ fn scalar_splats_into_vector_assignment() {
     }
     // ret *= 0.5;  ->  Assign(Mul, ret, Splat(0.5))
     match &expr_stmt(&stmts[1]).kind {
-        TExprKind::Assign { op, lhs, rhs } => {
+        TExprKind::Assign {
+            op,
+            op_ty,
+            lhs,
+            rhs,
+        } => {
             assert_eq!(*op, Some(BinOp::Mul));
+            assert_eq!(*op_ty, F3);
             assert_eq!(lhs.ty, F3);
             assert_eq!(rhs.ty, F3);
             match &rhs.kind {
@@ -246,7 +252,8 @@ fn non_lvalue_assignment_targets_are_errors() {
             "lvalue",
         ),
         ("void f() { float a = 0; (a + 1) = 2; }", "lvalue"),
-        ("float4 g; void f() { g = 1; }", "uniform"),
+        ("const float4 g = 1; void f() { g = 1; }", "const"),
+        ("sampler2D s; sampler2D t; void f() { s = t; }", "sampler"),
         ("static const float k = 1; void f() { k = 2; }", "const"),
         ("void f() { const float k = 1; k += 2; }", "const"),
         ("void f() { 3++; }", "lvalue"),
@@ -353,8 +360,30 @@ fn intrinsic_overloads() {
     let stmts = body(
         "float3 a = 1; float3 b = lerp(a, a * 2, 0.5); float c = dot(a, 1); float l = length(a); \
          int s = sign(-2.0); float3 p = pow(a, 2); float4 v = 0; float3 sat = saturate(v); \
-         bool any3 = any(a); float sn, cs; sincos(1.0, sn, cs); float3 mx = max(a, 0);",
+         bool any3 = any(a); float sn, cs; sincos(1.0, sn, cs); float3 mx = max(a, 0); \
+         float d1 = dot(2.0, 3); float3 nrm = normalize(a); int imx = max(1, 2); \
+         float2 sat2 = saturate(v.xy);",
     );
+    let init_ty = |i: usize| local(&stmts[i]).init.as_ref().unwrap().ty.clone();
+    let call_args = |i: usize| match &local(&stmts[i]).init.as_ref().unwrap().kind {
+        TExprKind::Call { args, .. } => args.iter().map(|a| a.ty.clone()).collect::<Vec<_>>(),
+        k => panic!("{k:?}"),
+    };
+    // saturate(float4) -> float4, then truncated to float3 by the initializer
+    let sat = local(&stmts[7]).init.as_ref().unwrap();
+    assert!(matches!(&sat.kind, TExprKind::Swizzle { base, .. } if base.ty == F4));
+    assert_eq!(init_ty(8), Ty::Bool);
+    assert_eq!(call_args(8), vec![Ty::Vec(Scalar::Bool, 3)]);
+    let TStmt::Expr(sc) = &stmts[11] else {
+        panic!("{:?}", stmts[11])
+    };
+    assert_eq!(sc.ty, Ty::Void);
+    assert_eq!(call_args(12), vec![F3, F3]);
+    assert_eq!(init_ty(13), Ty::Float);
+    assert_eq!(call_args(13), vec![Ty::Float, Ty::Float], "scalar dot");
+    assert_eq!(init_ty(14), F3);
+    assert_eq!(init_ty(15), Ty::Int);
+    assert_eq!(init_ty(16), F2);
     let b = local(&stmts[1]).init.as_ref().unwrap();
     let TExprKind::Call { args, .. } = &b.kind else {
         panic!()
@@ -538,7 +567,7 @@ fn statement_and_operator_errors() {
         ("void f() { return 1; }", "void"),
         ("void f() { float a = 1.5 & 2; }", "integer"),
         ("void f() { float a = 1; float a = 2; }", "redefinition"),
-        ("float4 g; float4 g;", "redefinition"),
+        ("float4 g; float3 g;", "redefinition"),
         ("void f() { float4 v = 0; float a = v.q; }", "swizzle"),
         ("void f() { float4 v = 0; float a = v[4]; }", "range"),
         ("void f() { float4x1 v = 0; }", "one row or column"),

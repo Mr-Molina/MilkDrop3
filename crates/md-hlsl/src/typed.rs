@@ -66,7 +66,8 @@ pub struct TField {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Storage {
     /// Plain (or `uniform`, or non-static `const`) global: a shader uniform
-    /// or resource; read-only in the shader.
+    /// or resource. Writable unless `const` or a sampler; see
+    /// [`TGlobal::written`].
     Uniform,
     /// `static`: module-private, writable.
     Private,
@@ -86,6 +87,14 @@ pub struct TGlobal {
     pub storage: Storage,
     pub semantic: Option<String>,
     pub init: Option<TExpr>,
+    /// A `Uniform` global the shader assigns to (MilkDrop's legacy compiler
+    /// allowed writes to uniforms). WGSL uniforms are read-only, so the
+    /// emitter (4.4) must declare a function-private copy, initialised at
+    /// the start of the entry point from the uniform value (or from `init`
+    /// when there is no uniform binding), and route every reference to it;
+    /// user functions that read or write it see the same copy (e.g. a
+    /// module-scope `var<private>`). Always `false` for other storages.
+    pub written: bool,
 }
 
 /// Parameter passing mode.
@@ -274,12 +283,23 @@ pub enum TExprKind {
         lhs: Box<TExpr>,
         rhs: Box<TExpr>,
     },
-    /// `op` is `None` for `=`; the rhs has the lhs type, and the node too.
-    /// A compound assignment whose HLSL arithmetic would happen in `float`
-    /// but whose target is `int`/`bool` (`i *= 1.5`) is lowered to
-    /// `i = (int)((float)i * 1.5)`, duplicating the lhs.
+    /// The node has the lhs type. For `=` (`op: None`) the rhs has the lhs
+    /// type and `op_ty` equals it.
+    ///
+    /// For a compound `lhs op= rhs` the lhs is evaluated ONCE (it may have
+    /// side effects, e.g. `a[i++] *= 1.5`): the emitter takes its address
+    /// (or a temporary) and computes `*p = L((O)*p op rhs)` where `O` is
+    /// `op_ty`, the type HLSL does the arithmetic in (the `Binary` typing
+    /// rules applied to the lhs and rhs types), the rhs already has type
+    /// `op_ty`, `(O)` is the implicit conversion lhs type → `op_ty` (element
+    /// `Cast` and/or `Splat`), and `L` the implicit conversion `op_ty` → lhs
+    /// type (element `Cast` and/or truncating swizzle, already warned).
+    /// When `op_ty` equals the lhs type both conversions are identities and
+    /// WGSL's own `op=` can be used. Examples: `int i; i *= 1.5` has
+    /// `op_ty = float`; `float x; x += v3` has `op_ty = float3`.
     Assign {
         op: Option<BinOp>,
+        op_ty: Ty,
         lhs: Box<TExpr>,
         rhs: Box<TExpr>,
     },

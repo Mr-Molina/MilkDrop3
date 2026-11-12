@@ -16,7 +16,7 @@
 //! | `Sign` | sign | `T → int` of `T`'s shape (HLSL returns int) |
 //! | `Reduce` | length | `T → float` (scalar allowed) |
 //! | `Reduce2` | distance | `T, T → float` (scalar allowed) |
-//! | `Dot` | dot | `floatN, floatN → float` |
+//! | `Dot` | dot | `T, T → float` (scalar `T` allowed, as the MilkDrop authoring guide documents `dot(float a, float b)`; the emitter lowers it to `a * b`) |
 //! | `VecOnly(1)` | normalize | `floatN → floatN` |
 //! | `VecOnly(2)` | reflect | `floatN, floatN → floatN` |
 //! | `Refract` | refract | `floatN, floatN, float → floatN` |
@@ -47,7 +47,7 @@
 //!
 //! Not covered (positioned errors): matrix arguments to the componentwise
 //! intrinsics (HLSL allows `abs(float3x3)` etc.; WGSL builtins do not), and
-//! scalar arguments to `dot`/`normalize`/`reflect`/`refract`.
+//! scalar arguments to `normalize`/`reflect`/`refract`.
 
 /// An HLSL intrinsic function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -96,7 +96,7 @@ impl Checker {
         ))
     }
 
-    fn out_arg(&self, a: &TExpr) -> R<()> {
+    fn out_arg(&mut self, a: &TExpr) -> R<()> {
         self.lvalue(a).map_err(|mut e| {
             e.message = format!("out argument must be an lvalue: {}", e.message);
             e
@@ -138,7 +138,7 @@ impl Checker {
                 Ok(call_expr(pos, Ty::Float, callee, args))
             }
             SigClass::Dot => {
-                let (args, _) = self.generic(pos, name, args, false, true)?;
+                let (args, _) = self.generic(pos, name, args, false, false)?;
                 Ok(call_expr(pos, Ty::Float, callee, args))
             }
             SigClass::VecOnly(_) => {

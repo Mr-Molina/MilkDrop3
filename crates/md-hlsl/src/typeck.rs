@@ -11,9 +11,15 @@
 //! - Untyped `sampler` globals take their dimension from use (see
 //!   [`crate::typed::TGlobal::ty`]); untyped `sampler` parameters are
 //!   `sampler2D`. `texture` globals are dropped; using one is an error.
-//! - Writes to non-`static` globals (uniforms) and to `const` are errors;
-//!   lvalues are variables, member/swizzle selections without repeated
-//!   components, and indexing of lvalues.
+//! - Writes to non-`static` globals are allowed, as MilkDrop's legacy
+//!   D3DX9_31 compiler allowed them (plugin.cpp:989, flag `1<<16`); such
+//!   globals are flagged `TGlobal::written`. Writes to `const` and samplers
+//!   are errors. Lvalues are variables, member/swizzle selections without
+//!   repeated components, and indexing of lvalues.
+//! - A non-static global redeclared with the same type, no initializer and
+//!   a compatible semantic merges into the first declaration (presets
+//!   redeclare include.fx's `float4 texsize_noise_lq;`); any other
+//!   redeclaration is an error.
 //! - `if`/`while`/`for`/`do` conditions must be scalar (fxc rejects vector
 //!   conditions); a vector `?:` condition is a componentwise select.
 //! - Implicit truncation (vector to shorter vector or scalar, matrix to a
@@ -29,7 +35,7 @@ mod expr;
 mod samplers;
 mod stmt;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::ast::{self, Decl, Expr, Module, Pos, SamplerKind, TypeKind, TypeName};
 use crate::typed::*;
@@ -66,6 +72,11 @@ pub fn check(m: &Module) -> Result<TypedModule, TranslateError> {
             }
         }
     }
+    for d in &mut decls {
+        if let TDecl::Global(g) = d {
+            g.written = c.written.contains(&g.name);
+        }
+    }
     Ok(TypedModule {
         decls,
         warnings: c.warnings,
@@ -79,6 +90,9 @@ struct GlobalSym {
     ty: Option<Ty>,
     storage: Storage,
     const_int: Option<i64>,
+    /// Written `const` (non-static `const` globals are `Uniform`).
+    is_const: bool,
+    semantic: Option<String>,
 }
 
 /// A local or parameter symbol.
@@ -109,6 +123,8 @@ struct Checker {
     loop_depth: u32,
     warnings: Vec<Warning>,
     untyped_dims: HashMap<String, SamplerKind>,
+    /// Uniform globals the shader writes (see `TGlobal::written`).
+    written: HashSet<String>,
 }
 
 /// A resolved variable.
@@ -290,15 +306,20 @@ impl Checker {
             _ => Storage::Uniform,
         };
         for d in &v.vars {
-            self.check_global_name(d.pos, &d.name)?;
             if v.ty.kind == TypeKind::Texture {
                 if !d.array.is_empty() || d.init.is_some() {
                     return err(d.pos, "texture arrays and initializers are not supported");
                 }
+                if self.benign_redecl(d, None, storage, q.is_const)? {
+                    continue;
+                }
+                self.check_global_name(d.pos, &d.name)?;
                 let sym = GlobalSym {
                     ty: None,
                     storage,
                     const_int: None,
+                    is_const: q.is_const,
+                    semantic: d.semantic.clone(),
                 };
                 self.globals.insert(d.name.clone(), sym);
                 continue;
@@ -313,6 +334,10 @@ impl Checker {
                 return err(d.pos, "variables cannot be void");
             }
             let (ty, init) = self.declarator_init(d, base)?;
+            if self.benign_redecl(d, Some(&ty), storage, q.is_const)? {
+                continue;
+            }
+            self.check_global_name(d.pos, &d.name)?;
             if storage == Storage::Const && init.is_none() {
                 return err(
                     d.pos,
@@ -332,6 +357,8 @@ impl Checker {
                     ty: Some(ty.clone()),
                     storage,
                     const_int,
+                    is_const: q.is_const,
+                    semantic: d.semantic.clone(),
                 },
             );
             out.push(TDecl::Global(TGlobal {
@@ -341,9 +368,43 @@ impl Checker {
                 storage,
                 semantic: d.semantic.clone(),
                 init,
+                written: false,
             }));
         }
         Ok(())
+    }
+
+    /// A redeclaration of an existing non-static, non-const global with the
+    /// same type, no initializer and a compatible semantic is a no-op
+    /// (presets write `float4 texsize_noise_lq;` although include.fx already
+    /// declares it, and MilkDrop's legacy compiler accepted that). Returns
+    /// `Ok(false)` when `d.name` is not yet a global; any other
+    /// redeclaration is an error.
+    fn benign_redecl(
+        &self,
+        d: &ast::Declarator,
+        ty: Option<&Ty>,
+        storage: Storage,
+        is_const: bool,
+    ) -> R<bool> {
+        let Some(prev) = self.globals.get(&d.name) else {
+            return Ok(false);
+        };
+        let semantic_ok = match (&prev.semantic, &d.semantic) {
+            (Some(a), Some(b)) => a.eq_ignore_ascii_case(b),
+            _ => true,
+        };
+        let same = prev.ty.as_ref() == ty
+            && prev.storage == Storage::Uniform
+            && storage == Storage::Uniform
+            && !prev.is_const
+            && !is_const
+            && d.init.is_none()
+            && semantic_ok;
+        if same {
+            return Ok(true);
+        }
+        err(d.pos, format!("redefinition of '{}'", d.name))
     }
 
     fn struct_decl(&mut self, s: &ast::StructDecl) -> R<TStruct> {

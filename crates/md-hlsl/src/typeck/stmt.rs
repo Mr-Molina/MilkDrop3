@@ -179,6 +179,7 @@ impl Checker {
                     );
                     let kind = TExprKind::Assign {
                         op: None,
+                        op_ty: ty.clone(),
                         lhs: Box::new(var),
                         rhs: Box::new(init),
                     };
