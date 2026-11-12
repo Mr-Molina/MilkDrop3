@@ -1,18 +1,11 @@
 //! Shared helpers of the md-hlsl integration tests: the preamble, the
-//! Task 4.6 wrapper (applied at AST level, as `plugin.cpp::LoadShaderFromMemory`
-//! builds it), and the emit + naga validation pipeline.
+//! Task 4.6 wrapper (`md_hlsl::parse_wrapped`), and the emit + naga
+//! validation pipeline.
 #![allow(dead_code)]
 
-use md_hlsl::ast::Decl;
 use md_hlsl::{Bindings, ShaderKind, TranslateError, TypedModule};
 
-pub const WARP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-    #define uv _uv.xy\n#define uv_orig _uv.zw\n";
-pub const COMP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-    #define uv _uv.xy\n#define uv_orig _uv.xy\n#define hue_shader _vDiffuse.xyz\n";
 pub const WARP_PARAMS: &str = "float4 _vDiffuse : COLOR, float4 _uv : TEXCOORD0, \
-    float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
-pub const COMP_PARAMS: &str = "float4 _vDiffuse : COLOR, float2 _uv : TEXCOORD0, \
     float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
 
 pub fn asset(name: &str) -> String {
@@ -25,32 +18,20 @@ pub fn fixture(name: &str) -> String {
     std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))
 }
 
-/// Parse `include.fx` + defines + a preset shader text and wrap its
-/// `shader_body` into `void PS(<params>) { float3 ret = 0; <body>
-/// _return_value = float4(ret.xyz, _vDiffuse.w); }`.
+/// `include.fx` + defines + a preset shader text, parsed and wrapped by the
+/// real Task 4.6 wrapper ([`md_hlsl::parse_wrapped`]).
 pub fn wrap_preset(body: &str, warp: bool) -> Result<md_hlsl::ast::Module, TranslateError> {
-    let (defines, params) = if warp {
-        (WARP_DEFINES, WARP_PARAMS)
-    } else {
-        (COMP_DEFINES, COMP_PARAMS)
-    };
-    let src = format!("{}\n{defines}{body}", asset("include.fx"));
-    let mut m = md_hlsl::parse(&md_hlsl::preprocess_tokens(&src)?)?;
-    let Some(Decl::ShaderBody(sb)) = m.decls.pop() else {
-        return Err(TranslateError::new(0, 0, "no shader_body"));
-    };
-    let wrapper = format!(
-        "void PS({params}) {{ float3 ret = 0; _return_value = float4(ret.xyz, _vDiffuse.w); }}"
-    );
-    let w = md_hlsl::parse(&md_hlsl::preprocess_tokens(&wrapper).unwrap()).unwrap();
-    let Some(Decl::Function(mut f)) = w.decls.into_iter().next() else {
-        unreachable!()
-    };
-    let last = f.body.stmts.pop().unwrap();
-    f.body.stmts.extend(sb.body.stmts);
-    f.body.stmts.push(last);
-    m.decls.push(Decl::Function(f));
-    Ok(m)
+    let preamble = asset("include.fx");
+    md_hlsl::parse_wrapped(&md_hlsl::ShaderInput {
+        kind: if warp {
+            ShaderKind::Warp
+        } else {
+            ShaderKind::Comp
+        },
+        body,
+        preamble: &preamble,
+        ps_version: md_hlsl::PsVersion::Ps2_0,
+    })
 }
 
 /// check → resolve_bindings → emit.
@@ -61,14 +42,8 @@ pub fn emit_typed(t: &TypedModule, kind: ShaderKind) -> Result<String, Translate
 
 /// Validate WGSL with naga; the error is naga's rendered message.
 pub fn naga_validate(wgsl: &str) -> Result<naga::Module, String> {
-    let m = naga::front::wgsl::parse_str(wgsl).map_err(|e| e.emit_to_string(wgsl))?;
-    naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::empty(),
-    )
-    .validate(&m)
-    .map_err(|e| e.emit_to_string(wgsl))?;
-    Ok(m)
+    md_hlsl::validate_wgsl(wgsl)?;
+    naga::front::wgsl::parse_str(wgsl).map_err(|e| e.emit_to_string(wgsl))
 }
 
 /// Emit `include.fx` + `globals` + `void PS(<warp params>) { body }`.

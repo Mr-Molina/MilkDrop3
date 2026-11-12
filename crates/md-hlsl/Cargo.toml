@@ -8,7 +8,9 @@ publish = false
 [lints]
 workspace = true
 
+[dependencies]
+naga = { workspace = true, features = ["wgsl-in"] }
+
 [dev-dependencies]
 md-preset = { path = "../md-preset" }
 md-testkit = { path = "../../tests/support/md-testkit" }
-naga = { workspace = true, features = ["wgsl-in"] }

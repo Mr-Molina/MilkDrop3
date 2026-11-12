@@ -1,21 +1,26 @@
-//! Task 4.4: naga validation of emitted modules — the hand-wrapped default
-//! warp fixture (F25), the shared uniform layout against naga's layouter,
-//! and the whole corpus (every shader must validate).
+//! Task 4.4: naga validation of emitted modules — the default warp shader
+//! (hand-wrapped per F25 until Task 4.6 replaced it with `translate`), the
+//! shared uniform layout against naga's layouter, and the whole corpus
+//! through `translate` (every shader must translate and validate).
 //! Run with `cargo test -p md-hlsl --test emit_corpus -- --nocapture`.
 
 mod common;
 
-use common::{asset, emit_typed, fixture, naga_validate, wrap_preset};
+use common::{asset, naga_validate};
 use md_hlsl::layout::{md_uniform_offset, md_uniforms_wgsl, MD_UNIFORMS_SIZE, MD_UNIFORM_FIELDS};
-use md_hlsl::ShaderKind;
+use md_hlsl::{translate, PsVersion, ShaderInput, ShaderKind};
 use md_preset::parse_milk;
 
 #[test]
 fn emitted_module_validates_with_naga() {
-    let src = format!("{}\n{}", asset("include.fx"), fixture("default_warp.hlsl"));
-    let t = md_hlsl::check(&md_hlsl::parse(&md_hlsl::preprocess_tokens(&src).unwrap()).unwrap())
-        .unwrap();
-    let w = emit_typed(&t, ShaderKind::Warp).unwrap();
+    let w = translate(&ShaderInput {
+        kind: ShaderKind::Warp,
+        body: &asset("warp_ps.fx"),
+        preamble: &asset("include.fx"),
+        ps_version: PsVersion::Ps2_0,
+    })
+    .unwrap()
+    .wgsl;
     let m = naga_validate(&w).unwrap_or_else(|e| panic!("{e}\n{w}"));
     let ep = &m.entry_points;
     assert_eq!(ep.len(), 1);
@@ -81,9 +86,9 @@ fn md_uniforms_layout_matches_naga() {
     assert_eq!(md_hlsl::layout::D3D9_HALF_TEXEL, -0.5);
 }
 
-/// Every corpus shader (and the shipped defaults): check → bindings → emit
-/// → naga. Reports counts and failures; every input must validate (66/66
-/// at Task 4.4), so regressions are caught.
+/// Every corpus shader (and the shipped defaults) through `translate`
+/// (wrap → check → bindings → emit → naga). Reports counts and failures;
+/// every input must translate (66/66 at Task 4.4), so regressions are caught.
 #[test]
 fn corpus_emission_report() {
     let mut inputs = vec![
@@ -97,6 +102,7 @@ fn corpus_emission_report() {
         inputs.push((format!("{name} warp"), true, p.warp_shader));
         inputs.push((format!("{name} comp"), false, p.comp_shader));
     }
+    let preamble = asset("include.fx");
     let mut failures = Vec::new();
     for (what, warp, body) in &inputs {
         let kind = if *warp {
@@ -104,15 +110,12 @@ fn corpus_emission_report() {
         } else {
             ShaderKind::Comp
         };
-        let r = wrap_preset(body, *warp)
-            .and_then(|m| md_hlsl::check(&m))
-            .map_err(|e| format!("check: {e}"))
-            .and_then(|t| emit_typed(&t, kind).map_err(|e| format!("emit: {e}")))
-            .and_then(|w| {
-                naga_validate(&w)
-                    .map(|_| ())
-                    .map_err(|e| format!("naga: {e}"))
-            });
+        let r = translate(&ShaderInput {
+            kind,
+            body,
+            preamble: &preamble,
+            ps_version: PsVersion::Ps2_0,
+        });
         if let Err(e) = r {
             failures.push(format!("{what}: {e}"));
         }

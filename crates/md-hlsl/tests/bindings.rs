@@ -1,7 +1,6 @@
 //! Task 4.5: sampler / texsize binding resolution.
 //! Run with `cargo test -p md-hlsl --test bindings`.
 
-use md_hlsl::ast::Decl;
 use md_hlsl::{
     check, parse, parse_rand_root, preprocess_tokens, resolve_bindings, Bindings, TranslateError,
     TypedModule,
@@ -223,42 +222,20 @@ fn rand_roots() {
 
 // ---- corpus -----------------------------------------------------------
 
-const WARP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-    #define uv _uv.xy\n#define uv_orig _uv.zw\n";
-const COMP_DEFINES: &str = "#define rad _rad_ang.x\n#define ang _rad_ang.y\n\
-    #define uv _uv.xy\n#define uv_orig _uv.xy\n#define hue_shader _vDiffuse.xyz\n";
-const WARP_PARAMS: &str = "float4 _vDiffuse : COLOR, float4 _uv : TEXCOORD0, \
-    float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
-const COMP_PARAMS: &str = "float4 _vDiffuse : COLOR, float2 _uv : TEXCOORD0, \
-    float2 _rad_ang : TEXCOORD1, out float4 _return_value : COLOR0";
-
-/// include.fx + defines + body wrapped into `void PS(...)` as 4.6 will.
+/// include.fx + defines + body wrapped by the real Task 4.6 wrapper.
 fn build_typed(body: &str, warp: bool) -> Result<TypedModule, TranslateError> {
-    let (defines, params) = if warp {
-        (WARP_DEFINES, WARP_PARAMS)
+    let preamble = include();
+    let kind = if warp {
+        md_hlsl::ShaderKind::Warp
     } else {
-        (COMP_DEFINES, COMP_PARAMS)
+        md_hlsl::ShaderKind::Comp
     };
-    let wrapper = format!(
-        "void PS({params}) {{ float3 ret = 0; _return_value = float4(ret.xyz, _vDiffuse.w); }}"
-    );
-    let Some(Decl::Function(mut f)) = parse(&preprocess_tokens(&wrapper)?)?
-        .decls
-        .into_iter()
-        .next()
-    else {
-        panic!("wrapper")
-    };
-    let src = format!("{}\n{defines}{body}", include());
-    let mut m = parse(&preprocess_tokens(&src)?)?;
-    let Some(Decl::ShaderBody(sb)) = m.decls.pop() else {
-        panic!("no shader_body")
-    };
-    let last = f.body.stmts.pop().unwrap();
-    f.body.stmts.extend(sb.body.stmts);
-    f.body.stmts.push(last);
-    m.decls.push(Decl::Function(f));
-    check(&m)
+    check(&md_hlsl::parse_wrapped(&md_hlsl::ShaderInput {
+        kind,
+        body,
+        preamble: &preamble,
+        ps_version: md_hlsl::PsVersion::Ps2_0,
+    })?)
 }
 
 fn corpus_bindings(file: &str) -> (Bindings, Bindings) {
