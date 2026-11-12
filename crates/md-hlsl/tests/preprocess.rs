@@ -88,3 +88,38 @@ fn unsupported_directives_and_bad_macros_error() {
     let e = preprocess_tokens("#define F(a) a\nF(1").unwrap_err();
     assert_eq!((e.line, e.col), (2, 1));
 }
+
+#[test]
+fn hide_sets_survive_argument_pre_expansion() {
+    assert_eq!(
+        texts("#define A A+1\n#define F(x) x\nF(A)").join(" "),
+        "A + 1"
+    );
+    assert_eq!(
+        texts("#define A A+1\n#define F(x) x\nF(F(A))").join(" "),
+        "A + 1"
+    );
+}
+
+#[test]
+fn deep_nesting_is_an_error_not_a_crash() {
+    let n = 20000;
+    let src = format!("#define F(x) x\n{}1{}", "F(".repeat(n), ")".repeat(n));
+    let t = std::time::Instant::now();
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("too deeply"), "{e}");
+    assert!(t.elapsed().as_secs() < 5);
+}
+
+#[test]
+fn exponential_expansion_is_an_error() {
+    let mut src = String::from("#define A0 x\n");
+    for i in 1..=30 {
+        src.push_str(&format!("#define A{i} A{} A{}\n", i - 1, i - 1));
+    }
+    src.push_str("A30\n");
+    let t = std::time::Instant::now();
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("too large"), "{e}");
+    assert!(t.elapsed().as_secs() < 10);
+}

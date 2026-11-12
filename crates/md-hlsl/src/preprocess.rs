@@ -183,33 +183,95 @@ fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<()
     Ok(())
 }
 
+/// Maximum macro-expansion nesting (replacement rescans plus argument
+/// pre-expansion). Far above `include.fx` (depth 2) and any real preset.
+const MAX_DEPTH: usize = 128;
+/// Maximum tokens produced by expansion in one `preprocess_tokens` call
+/// (counted across all nesting levels). `include.fx` plus a large preset is
+/// a few thousand; this stops exponential ("billion laughs") expansion.
+const MAX_TOKENS: usize = 2_000_000;
+
+/// A token plus the C "painted blue" mark: an identifier met while its own
+/// macro was being expanded is never expanded again, on any later rescan.
+#[derive(Clone)]
+struct PTok {
+    tok: Token,
+    blue: bool,
+}
+
+struct Limits {
+    produced: usize,
+}
+
 fn expand(
     toks: &[Token],
     macros: &Macros,
     active: &mut Vec<String>,
 ) -> Result<Vec<Token>, TranslateError> {
+    let input: Vec<PTok> = toks
+        .iter()
+        .map(|t| PTok {
+            tok: t.clone(),
+            blue: false,
+        })
+        .collect();
+    let mut limits = Limits { produced: 0 };
+    let out = expand_p(&input, macros, active, 0, &mut limits)?;
+    Ok(out.into_iter().map(|p| p.tok).collect())
+}
+
+fn expand_p(
+    toks: &[PTok],
+    macros: &Macros,
+    active: &mut Vec<String>,
+    depth: usize,
+    limits: &mut Limits,
+) -> Result<Vec<PTok>, TranslateError> {
     let mut out = Vec::with_capacity(toks.len());
     let mut i = 0;
     while i < toks.len() {
-        let t = &toks[i];
-        let mac = t
-            .ident()
-            .filter(|n| !active.iter().any(|a| a == n))
-            .and_then(|n| macros.get(n).map(|m| (n, m)));
-        let Some((name, m)) = mac else {
-            out.push(t.clone());
+        let pt = &toks[i];
+        let t = &pt.tok;
+        if depth > MAX_DEPTH {
+            return Err(TranslateError::new(
+                t.line,
+                t.col,
+                "macro expansion nested too deeply",
+            ));
+        }
+        limits.produced += 1;
+        if limits.produced > MAX_TOKENS {
+            return Err(TranslateError::new(
+                t.line,
+                t.col,
+                "macro expansion too large",
+            ));
+        }
+        let Some((name, m)) = t.ident().and_then(|n| macros.get(n).map(|m| (n, m))) else {
+            out.push(pt.clone());
             i += 1;
             continue;
         };
-        let mut replacement = Vec::new();
+        if pt.blue || active.iter().any(|a| a == name) {
+            out.push(PTok {
+                tok: t.clone(),
+                blue: true,
+            });
+            i += 1;
+            continue;
+        }
+        let mut replacement: Vec<PTok> = Vec::new();
         match &m.params {
             None => {
-                replacement.extend(m.body.iter().cloned());
+                replacement.extend(m.body.iter().map(|b| PTok {
+                    tok: b.clone(),
+                    blue: false,
+                }));
                 i += 1;
             }
             Some(params) => {
-                if !toks.get(i + 1).is_some_and(|n| n.is_op("(")) {
-                    out.push(t.clone());
+                if !toks.get(i + 1).is_some_and(|n| n.tok.is_op("(")) {
+                    out.push(pt.clone());
                     i += 1;
                     continue;
                 }
@@ -229,25 +291,28 @@ fn expand(
                         ),
                     ));
                 }
-                let expanded: Vec<Vec<Token>> = args
+                let expanded: Vec<Vec<PTok>> = args
                     .iter()
-                    .map(|a| expand(a, macros, active))
+                    .map(|a| expand_p(a, macros, active, depth + 1, limits))
                     .collect::<Result<_, _>>()?;
                 for b in &m.body {
                     match b.ident().and_then(|id| params.iter().position(|p| p == id)) {
                         Some(p) => replacement.extend(expanded[p].iter().cloned()),
-                        None => replacement.push(b.clone()),
+                        None => replacement.push(PTok {
+                            tok: b.clone(),
+                            blue: false,
+                        }),
                     }
                 }
                 i = next;
             }
         }
         active.push(name.to_string());
-        let mut result = expand(&replacement, macros, active)?;
+        let mut result = expand_p(&replacement, macros, active, depth + 1, limits)?;
         active.pop();
         for r in &mut result {
-            r.line = t.line;
-            r.col = t.col;
+            r.tok.line = t.line;
+            r.tok.col = t.col;
         }
         out.extend(result);
     }
@@ -257,15 +322,15 @@ fn expand(
 /// Collect comma-separated arguments from `start` (just after the `(`) up to
 /// the matching `)`. Returns the args and the index after the `)`.
 fn collect_args(
-    toks: &[Token],
+    toks: &[PTok],
     start: usize,
     name: &Token,
-) -> Result<(Vec<Vec<Token>>, usize), TranslateError> {
-    let mut args: Vec<Vec<Token>> = vec![Vec::new()];
+) -> Result<(Vec<Vec<PTok>>, usize), TranslateError> {
+    let mut args: Vec<Vec<PTok>> = vec![Vec::new()];
     let mut depth = 1;
     let mut j = start;
     while j < toks.len() {
-        let t = &toks[j];
+        let t = &toks[j].tok;
         if t.is_op("(") {
             depth += 1;
         } else if t.is_op(")") {
@@ -278,7 +343,7 @@ fn collect_args(
             j += 1;
             continue;
         }
-        args.last_mut().expect("non-empty").push(t.clone());
+        args.last_mut().expect("non-empty").push(toks[j].clone());
         j += 1;
     }
     Err(TranslateError::new(
