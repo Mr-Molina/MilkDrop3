@@ -268,3 +268,6 @@ Task 5.1: Ruling: bundled fallback font is Liberation Sans Regular 2.1.5 (OFL, 4
 Task 5.1: fix round 1/5 dispatched (Important: size_px wrap → panic; rasterize-before-size-check → unbounded allocation). Folded in: saturating layout arithmetic, edge-case tests, textmgr flag-masking doc.
 Task 5.1: Note (binds Task 6.6): MilkDrop's text manager strips DT_WORD_ELLIPSIS | DT_END_ELLIPSIS | DT_NOPREFIX before drawing (code/vis_milk2/textmgr.cpp:122/:174, comment ~:604) — effective behaviour is no ellipsis and `&` prefix processing ON; the text pass must apply the same masking.
 Task 5.1: minor (deferred): Win32 DT_WORD_ELLIPSIS truncates the overlong word itself (brief mandates word-boundary truncation); trailing "\n" line-count semantics unverified; no clipping to rect.
+Task 5.1: fix round 1/5 (5 addressed, 0 open; commits fef9244..844958d)
+Task 5.1: minor (deferred): ellipsize `dot*3` / `w + a` unsaturated (needs ~2M glyphs); weak zero-rect assertion.
+Task 5.1: complete (commits 08934b1..98d8a7d + fix 844958d, review clean after 1 fix round)
