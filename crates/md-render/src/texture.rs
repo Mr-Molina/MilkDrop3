@@ -73,7 +73,11 @@ impl Texture2d {
     /// If `rgba.len() != w * h * 4` or a dimension is 0.
     pub fn from_rgba8(gpu: &Gpu, w: u32, h: u32, rgba: &[u8], mips: bool) -> Texture2d {
         assert!(w > 0 && h > 0, "empty texture {w}x{h}");
-        assert_eq!(rgba.len(), (w * h * 4) as usize, "rgba8 data for {w}x{h}");
+        assert_eq!(
+            rgba.len() as u64,
+            u64::from(w) * u64::from(h) * 4,
+            "rgba8 data for {w}x{h}"
+        );
         let t = Texture2d::new_target(gpu, w, h, wgpu::TextureFormat::Rgba8Unorm, mips);
         write_level(gpu, &t.tex, 0, (w, h, 1), rgba);
         generate_mips(gpu, &t);
@@ -117,8 +121,8 @@ impl Texture3d {
     pub fn from_rgba8(gpu: &Gpu, w: u32, h: u32, d: u32, rgba: &[u8], mips: bool) -> Texture3d {
         assert!(w > 0 && h > 0 && d > 0, "empty volume {w}x{h}x{d}");
         assert_eq!(
-            rgba.len(),
-            (w * h * d * 4) as usize,
+            rgba.len() as u64,
+            u64::from(w) * u64::from(h) * u64::from(d) * 4,
             "rgba8 data for {w}x{h}x{d}"
         );
         let mips = if mips { full_mip_count(w, h, d) } else { 1 };

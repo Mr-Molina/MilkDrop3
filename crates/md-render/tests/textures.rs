@@ -8,8 +8,8 @@
 use image::{ImageFormat, Rgba, RgbaImage};
 use md_render::noise::{dwords_to_rgba8, noise_2d};
 use md_render::{
-    gpu_or_skip, load_image, locate_texture, pick_random_texture, read_texture_level,
-    scan_texture_names, ImageError, RandPicks, TextureError, TextureStore, TEXTURE_EXTS,
+    gpu_or_skip, load_image, pick_random_texture, read_texture_level, scan_texture_names,
+    texture_candidates, ImageError, RandPicks, TextureError, TextureStore, TEXTURE_EXTS,
 };
 use rand_core::SeedableRng;
 use std::path::{Path, PathBuf};
@@ -65,46 +65,89 @@ fn rng(seed: u64) -> rand_pcg::Pcg32 {
 }
 
 #[test]
-fn extension_search_order() {
+fn extension_search_order_last_candidate_wins() {
     // F32: texture_exts in plugin.cpp:2847.
     assert_eq!(TEXTURE_EXTS, ["jpg", "dds", "png", "tga", "bmp", "dib"]);
     let tex = temp_dir("order-tex");
     let preset = temp_dir("order-preset");
-    for ext in ["dib", "bmp", "tga", "png", "dds"] {
-        touch(&tex.join(format!("x.{ext}")));
-    }
-    touch(&preset.join("x.jpg"));
     let dirs = [tex.as_path(), preset.as_path()];
-    // Extension-major: presets/x.jpg beats textures/x.dds.
-    assert_eq!(locate_texture(&dirs, "x"), Some(preset.join("x.jpg")));
-    std::fs::remove_file(preset.join("x.jpg")).unwrap();
-    for ext in ["dds", "png", "tga", "bmp", "dib"] {
-        assert_eq!(
-            locate_texture(&dirs, "x"),
-            Some(tex.join(format!("x.{ext}")))
-        );
-        std::fs::remove_file(tex.join(format!("x.{ext}"))).unwrap();
+    // plugin.cpp:3158-3167: extensions outer; per extension the textures
+    // dir, else the preset dir (at most one file per extension).
+    touch(&preset.join("x.jpg"));
+    touch(&tex.join("x.png"));
+    touch(&preset.join("x.png")); // shadowed by textures/x.png
+    touch(&preset.join("x.dib"));
+    touch(&tex.join("x.dds"));
+    touch(&tex.join("other.tga"));
+    assert_eq!(
+        texture_candidates(&dirs, "x"),
+        [
+            preset.join("x.jpg"),
+            tex.join("x.dds"),
+            tex.join("x.png"),
+            preset.join("x.dib"),
+        ]
+    );
+    for ext in ["jpg", "dds", "png", "tga", "bmp", "dib"] {
+        touch(&tex.join(format!("y.{ext}")));
     }
-    assert_eq!(locate_texture(&dirs, "x"), None);
-    // Within one extension the textures dir comes first.
-    touch(&tex.join("y.png"));
-    touch(&preset.join("y.png"));
-    assert_eq!(locate_texture(&dirs, "y"), Some(tex.join("y.png")));
+    let all: Vec<PathBuf> = TEXTURE_EXTS
+        .iter()
+        .map(|e| tex.join(format!("y.{e}")))
+        .collect();
+    assert_eq!(texture_candidates(&dirs, "y"), all);
+    assert!(texture_candidates(&dirs, "z").is_empty());
 }
 
 #[test]
 fn texture_names_match_case_insensitively() {
     let tex = temp_dir("case");
     touch(&tex.join("Heart.JPG"));
-    assert_eq!(
-        locate_texture(&[&tex], "heart"),
-        Some(tex.join("Heart.JPG"))
+    for root in ["heart", "HEART"] {
+        assert_eq!(texture_candidates(&[&tex], root), [tex.join("Heart.JPG")]);
+    }
+    assert!(texture_candidates(&[&tex], "hear").is_empty());
+}
+
+#[test]
+fn store_keeps_last_decodable_candidate() {
+    let Some(gpu) = gpu_or_skip("store_keeps_last_decodable_candidate") else {
+        return;
+    };
+    let tex = temp_dir("lastwins-tex");
+    let preset = temp_dir("lastwins-preset");
+    // Corrupt jpg, valid png: the png loads (failure falls through).
+    std::fs::write(tex.join("a.jpg"), b"corrupt").unwrap();
+    write(
+        &tex.join("a.png"),
+        &solid(2, 2, [0, 0, 255, 255]),
+        ImageFormat::Png,
     );
-    assert_eq!(
-        locate_texture(&[&tex], "HEART"),
-        Some(tex.join("Heart.JPG"))
+    // Valid jpg and dds, corrupt png after them: the dds (last that
+    // decodes) wins, not the first.
+    write(
+        &preset.join("b.jpg"),
+        &solid(4, 4, [255, 0, 0, 255]),
+        ImageFormat::Jpeg,
     );
-    assert_eq!(locate_texture(&[&tex], "hear"), None);
+    write_dds(&tex.join("b.dds"), 2, 1, [7, 8, 9, 10]);
+    std::fs::write(tex.join("b.png"), b"corrupt").unwrap();
+    // Only corrupt candidates: the error surfaces.
+    std::fs::write(tex.join("c.jpg"), b"corrupt").unwrap();
+    let mut store = TextureStore::new(&gpu, 1);
+    store.scan_dir(&tex);
+    store.set_preset_dir(Some(&preset));
+
+    let t = store.get(&gpu, "a").expect("png after corrupt jpg");
+    assert_eq!(read_texture_level(&gpu, &t.tex, 0)[..4], [0, 0, 255, 255]);
+    let t = store.get(&gpu, "b").unwrap();
+    assert_eq!((t.w, t.h), (2, 1));
+    assert_eq!(
+        read_texture_level(&gpu, &t.tex, 0),
+        [7, 8, 9, 10, 7, 8, 9, 10]
+    );
+    assert!(matches!(store.load(&gpu, "c"), Err(TextureError::Image(_))));
+    assert_eq!(store.usage().0, 2);
 }
 
 #[test]
@@ -311,13 +354,14 @@ fn get_loads_with_mips_from_textures_then_preset_dir() {
     store.scan_dir(&tex);
     store.set_preset_dir(Some(&preset));
 
-    // jpg wins over dds and png, even from the preset dir.
+    // Candidates preset/pic.jpg, textures/pic.dds, textures/Pic.png all
+    // decode: the last (png) wins.
     let t = store.get(&gpu, "PIC").unwrap();
-    assert_eq!((t.w, t.h, t.mips), (16, 16, 5));
+    assert_eq!((t.w, t.h, t.mips), (8, 4, 4));
     let px = read_texture_level(&gpu, &t.tex, 0);
-    assert!(px[0] < 8 && px[1] > 247 && px[2] < 8, "{:?}", &px[..4]);
-    assert_eq!(store.size_of("pic"), Some((16, 16)));
-    assert_eq!(store.usage(), (1, 16 * 16 * 4 + 16384));
+    assert_eq!(px[..4], [255, 0, 0, 255]);
+    assert_eq!(store.size_of("pic"), Some((8, 4)));
+    assert_eq!(store.usage(), (1, 8 * 4 * 4 + 16384));
     // Cached: the same texture again.
     let id = store.load(&gpu, "pic").unwrap();
     assert_eq!(store.load(&gpu, "Pic").unwrap(), id);

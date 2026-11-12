@@ -2,10 +2,13 @@
 //! the generated noise textures, and random-texture (`randNN`) picks.
 //!
 //! Where files are found (CShaderParams::CacheParams, plugin.cpp:3158-3171):
-//! for each extension of [`TEXTURE_EXTS`] in order, the textures directory
-//! (`<milkdrop2>/textures/`, set with [`TextureStore::scan_dir`]) and then
-//! the preset directory ([`TextureStore::set_preset_dir`]) — so
-//! `presets/x.jpg` beats `textures/x.png`. Windows file names are
+//! for each extension of [`TEXTURE_EXTS`] in order, the file in the textures
+//! directory (`<milkdrop2>/textures/`, set with [`TextureStore::scan_dir`])
+//! or, if absent there, in the preset directory
+//! ([`TextureStore::set_preset_dir`]). The C++ loop never `break`s, so every
+//! candidate is loaded and the LAST one that loads wins (`textures/x.png`
+//! beats `presets/x.jpg`), while a corrupt candidate falls through to the
+//! others — see [`texture_candidates`]. Windows file names are
 //! case-insensitive, so on every OS `sampler_Heart` finds `heart.JPG` and
 //! all texture and noise names compare case-insensitively.
 //!
@@ -66,13 +69,20 @@ fn find_in_dir(dir: &Path, name: &str) -> Option<PathBuf> {
     hits.into_iter().next()
 }
 
-/// The file a texture `root` loads from: extensions in [`TEXTURE_EXTS`]
-/// order, and for each, `dirs` in order (textures dir, then preset dir).
-pub fn locate_texture(dirs: &[&Path], root: &str) -> Option<PathBuf> {
-    TEXTURE_EXTS.iter().find_map(|ext| {
-        dirs.iter()
-            .find_map(|dir| find_in_dir(dir, &format!("{root}.{ext}")))
-    })
+/// The files CacheParams tries for texture `root`, in its loop order
+/// (plugin.cpp:3158-3167): for each extension of [`TEXTURE_EXTS`], the
+/// file in the first of `dirs` (textures dir, then preset dir) that has
+/// it — at most one per extension. The loop has no `break`, so every
+/// candidate is loaded in turn and the LAST one that loads wins; a failed
+/// load just moves on (see [`TextureStore::load`]).
+pub fn texture_candidates(dirs: &[&Path], root: &str) -> Vec<PathBuf> {
+    TEXTURE_EXTS
+        .iter()
+        .filter_map(|ext| {
+            dirs.iter()
+                .find_map(|dir| find_in_dir(dir, &format!("{root}.{ext}")))
+        })
+        .collect()
 }
 
 /// The random-texture candidates of `dir`: file names with a texture
@@ -202,14 +212,14 @@ impl TextureStore {
         self.cache.usage()
     }
 
-    /// The file `root` would load from.
-    pub fn locate(&self, root: &str) -> Option<PathBuf> {
+    /// The files `root` tries, in order (see [`texture_candidates`]).
+    pub fn candidates(&self, root: &str) -> Vec<PathBuf> {
         let dirs: Vec<&Path> = [&self.textures_dir, &self.preset_dir]
             .into_iter()
             .flatten()
             .map(PathBuf::as_path)
             .collect();
-        locate_texture(&dirs, root)
+        texture_candidates(&dirs, root)
     }
 
     /// The disk texture `root`: cached (its age refreshed), or found,
@@ -221,15 +231,25 @@ impl TextureStore {
             return Ok(id);
         }
         self.cache.make_room();
-        let path = self.locate(root).ok_or_else(|| TextureError::NotFound {
-            root: root.to_string(),
-        })?;
-        let img = load_image(&path)?;
-        let (w, h) = img.dimensions();
+        // Mirror the C++ candidate loop: the last candidate that decodes
+        // (and fits the device) wins; failures fall through to the next.
         let max = gpu.device().limits().max_texture_dimension_2d;
-        if w > max || h > max {
-            return Err(TextureError::TooLarge { path, w, h, max });
+        let mut best = None;
+        let mut err = TextureError::NotFound {
+            root: root.to_string(),
+        };
+        for path in self.candidates(root) {
+            match load_image(&path) {
+                Ok(img) if img.width() > max || img.height() > max => {
+                    let (w, h) = img.dimensions();
+                    err = TextureError::TooLarge { path, w, h, max };
+                }
+                Ok(img) => best = Some(img),
+                Err(e) => err = e.into(),
+            }
         }
+        let img = best.ok_or(err)?;
+        let (w, h) = img.dimensions();
         let tex = Texture2d::from_rgba8(gpu, w, h, img.as_raw(), true);
         let bytes = u64::from(w) * u64::from(h) * 4 + TEXTURE_OVERHEAD_BYTES;
         Ok(self.cache.insert(root, tex, bytes))

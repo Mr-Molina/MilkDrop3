@@ -42,8 +42,8 @@ pub use readback::{map_read, read_texture_level};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
 pub use textures::{
-    locate_texture, pick_random_texture, scan_texture_names, RandPicks, TextureError, TextureStore,
-    TEXTURE_EXTS,
+    pick_random_texture, scan_texture_names, texture_candidates, RandPicks, TextureError,
+    TextureStore, TEXTURE_EXTS,
 };
 pub use uniforms::{pack_mat4x3, texsizes_bytes, BlurUniforms, MdUniforms, VsParams};
 pub use vertex::{vertices_to_bytes, Vertex};
