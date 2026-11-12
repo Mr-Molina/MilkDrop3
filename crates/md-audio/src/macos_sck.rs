@@ -41,6 +41,7 @@ use objc2_screen_capture_kit::{
 };
 use std::ptr::NonNull;
 use std::sync::{mpsc, Arc};
+use std::time::{Duration, Instant};
 
 /// Capture rate requested from ScreenCaptureKit (its native rate).
 const RATE: u32 = 48_000;
@@ -68,7 +69,10 @@ pub fn default_loopback() -> Result<Box<dyn AudioSource>, AudioError> {
     }
     spawn_capture("md-audio-sck", OPEN_TIMEOUT, start, |capture, ring| {
         ring.wait_for_stop();
-        capture.stop();
+        // `Capture::drop` stops the stream. If `spawn_capture` gave up waiting, `run`
+        // never gets here, but the guard is dropped all the same, so a stream that
+        // started late is stopped too.
+        drop(capture);
     })
 }
 
@@ -109,7 +113,8 @@ struct OutputIvars {
 
 define_class!(
     // SAFETY: NSObject has no subclassing requirements and `Output` does not implement
-    // `Drop`.
+    // `Drop`. Its methods are called on ScreenCaptureKit's dispatch queues; its only
+    // ivar is an `Arc<CaptureRing>`, which is `Send + Sync`.
     #[unsafe(super(NSObject))]
     #[name = "MdAudioScreenCaptureOutput"]
     #[ivars = OutputIvars]
@@ -171,7 +176,7 @@ fn push_sample_buffer(ring: &CaptureRing, buffer: &CMSampleBuffer) {
             buffer.data_buffer(),
         )
     };
-    let (true, Some(format), Some(block), Ok(frames)) =
+    let (true, Some(format), Some(block), Ok(frames @ 1..)) =
         (ready, format, block, usize::try_from(frames))
     else {
         return;
@@ -197,12 +202,16 @@ fn push_sample_buffer(ring: &CaptureRing, buffer: &CMSampleBuffer) {
     let rate = asbd.mSampleRate.round() as u32;
     let len = frames * usize::from(channels) * 4;
     // SAFETY: read-only query on a live, retained block buffer.
-    if unsafe { block.data_length() } < len {
+    let available = unsafe { block.data_length() };
+    // Planar data is split into equal planes by position, so any padding would shift the
+    // later channels: require the exact size. Interleaved data only needs `len` bytes.
+    if available < len || (planar && available != len) {
         return;
     }
     let mut bytes = vec![0u8; len];
-    // SAFETY: `bytes` is a writable allocation of exactly `len` bytes, and the block
-    // buffer holds at least `len` bytes from offset 0 (checked above).
+    // SAFETY: `bytes` is a writable allocation of exactly `len` bytes (non-zero: frames
+    // and channels are both non-zero), and the block buffer holds at least `len` bytes
+    // from offset 0 (checked above).
     let status =
         unsafe { block.copy_data_bytes(0, len, NonNull::from(bytes.as_mut_slice()).cast()) };
     if status == 0 {
@@ -215,19 +224,24 @@ fn push_sample_buffer(ring: &CaptureRing, buffer: &CMSampleBuffer) {
 /// capture thread.
 struct SendContent(Retained<SCShareableContent>);
 
-// SAFETY: SCShareableContent is an immutable snapshot and not main-thread-only; the
-// value is moved (never shared) to exactly one other thread, and Objective-C
-// retain/release are thread-safe.
+// SAFETY: SCShareableContent is an immutable snapshot and not main-thread-only. The
+// completion handler runs on one of ScreenCaptureKit's dispatch queues and moves the
+// value (never shares it) through a channel to the capture thread, which is then its
+// only user. Objective-C retain/release are atomic, so dropping it on either thread is
+// sound.
 #[allow(unsafe_code)]
 unsafe impl Send for SendContent {}
 
 #[allow(unsafe_code)]
-fn shareable_content() -> Result<Retained<SCShareableContent>, AudioError> {
+fn shareable_content(deadline: Instant) -> Result<Retained<SCShareableContent>, AudioError> {
     let (tx, rx) = mpsc::sync_channel(1);
+    // Runs on a ScreenCaptureKit dispatch queue, not on the capture thread; it captures
+    // only the `SyncSender` (which is `Send`) and moves results out through it.
     let handler = RcBlock::new(
         move |content: *mut SCShareableContent, error: *mut NSError| {
             // SAFETY: `content` is nil or a valid object for the duration of the
-            // handler; `retain` takes our own reference before it returns.
+            // handler; `retain` takes our own (atomically counted) reference before it
+            // returns.
             let result = match unsafe { Retained::retain(content) } {
                 Some(c) => Ok(SendContent(c)),
                 None => Err(completion_error(error).unwrap_or_else(|| {
@@ -238,31 +252,43 @@ fn shareable_content() -> Result<Retained<SCShareableContent>, AudioError> {
         },
     );
     // SAFETY: the handler matches the declared block signature; ScreenCaptureKit copies
-    // the block, so it may outlive this call.
+    // the block, which may outlive this call and runs on another thread (its captures
+    // are `Send`).
     unsafe { SCShareableContent::getShareableContentWithCompletionHandler(&handler) };
-    match rx.recv_timeout(OPEN_TIMEOUT) {
+    match rx.recv_timeout(remaining(deadline)) {
         Ok(r) => r.map(|c| c.0),
         Err(_) => Err(timed_out("shareable content")),
     }
 }
 
-/// A running stream; lives on the capture thread until the source is dropped.
+fn remaining(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
+}
+
+/// A started (or starting) stream and its output object. Dropping it, on any path,
+/// asks ScreenCaptureKit to stop the stream, so a stream is never released while it is
+/// still delivering callbacks to `output`.
 struct Capture {
     stream: Retained<SCStream>,
     output: Retained<Output>,
 }
 
-impl Capture {
-    /// Asks ScreenCaptureKit to stop without waiting; the completion handler keeps the
-    /// stream and its output alive until the stop has finished.
+impl Drop for Capture {
+    /// Requests the stop without waiting. The completion handler holds extra references
+    /// to the stream and its output, so both stay alive until ScreenCaptureKit reports
+    /// that the stop finished and no further sample callbacks can arrive.
     #[allow(unsafe_code)]
-    fn stop(self) {
-        let keep = (self.stream.clone(), self.output);
+    fn drop(&mut self) {
+        let keep = (self.stream.clone(), self.output.clone());
+        // Runs on a ScreenCaptureKit dispatch queue and releases `keep` there.
         let handler = RcBlock::new(move |_error: *mut NSError| {
             let _alive = &keep;
         });
-        // SAFETY: `stream` is a live SCStream; the handler matches the declared block
-        // signature and is copied by ScreenCaptureKit.
+        // SAFETY: `stream` is a live SCStream (we hold a reference). The handler matches
+        // the declared block signature and is copied by ScreenCaptureKit, which may run
+        // and release it on another thread: that only drops `Retained` handles, and
+        // Objective-C retain/release are atomic. Stopping a stream that never started
+        // only reports an error to the handler.
         unsafe { self.stream.stopCaptureWithCompletionHandler(Some(&handler)) };
     }
 }
@@ -270,7 +296,11 @@ impl Capture {
 /// Builds and starts the audio-only stream (runs on the capture thread).
 #[allow(unsafe_code)]
 fn start(ring: &Arc<CaptureRing>) -> Result<Capture, AudioError> {
-    let content = shareable_content()?;
+    // Both waits below share one budget, a little shorter than `spawn_capture`'s, so
+    // this thread normally gives up before the caller does. If it still finishes late,
+    // the caller has dropped the channel and `Capture::drop` stops the stream.
+    let deadline = Instant::now() + OPEN_TIMEOUT.saturating_sub(Duration::from_millis(500));
+    let content = shareable_content(deadline)?;
     // SAFETY: `content` is a live snapshot; `displays` only reads it.
     let display = unsafe { content.displays() }.firstObject().ok_or_else(|| {
         AudioError::DeviceNotFound("system audio (ScreenCaptureKit lists no display)".into())
@@ -317,8 +347,11 @@ fn start(ring: &Arc<CaptureRing>) -> Result<Capture, AudioError> {
         )
     };
     let queue = DispatchQueue::new("md-audio.screencapturekit", None);
-    // SAFETY: `output` outlives the stream's use of it (kept by `Capture`), and the
-    // queue is a serial queue whose callbacks only touch the thread-safe ring.
+    // SAFETY: `output` outlives the stream's use of it: `Capture` holds it, and its Drop
+    // keeps it alive until the stop completes. Its methods run on `queue`, a serial
+    // dispatch queue serviced by libdispatch threads (not this thread); the only state
+    // they touch is the ivar, a single `Arc<CaptureRing>` whose ring is Mutex/Condvar
+    // protected, so running concurrently with the capture thread is sound.
     unsafe {
         stream.addStreamOutput_type_sampleHandlerQueue_error(
             output_proto,
@@ -328,20 +361,24 @@ fn start(ring: &Arc<CaptureRing>) -> Result<Capture, AudioError> {
     }
     .map_err(|e| ns_error(&e))?;
 
+    // From here on every exit path drops `capture`, which stops the stream.
+    let capture = Capture { stream, output };
     let (tx, rx) = mpsc::sync_channel(1);
+    // Runs on a ScreenCaptureKit dispatch queue; captures only the `Send` sender.
     let handler = RcBlock::new(move |error: *mut NSError| {
         let _ = tx.send(completion_error(error));
     });
-    // SAFETY: `stream` is live; the handler matches the declared block signature and is
-    // copied by ScreenCaptureKit.
-    unsafe { stream.startCaptureWithCompletionHandler(Some(&handler)) };
-    let capture = Capture { stream, output };
-    match rx.recv_timeout(OPEN_TIMEOUT) {
+    // SAFETY: `capture.stream` is live; the handler matches the declared block signature
+    // and is copied by ScreenCaptureKit, which runs it on another thread (its captures
+    // are `Send`).
+    unsafe {
+        capture
+            .stream
+            .startCaptureWithCompletionHandler(Some(&handler))
+    };
+    match rx.recv_timeout(remaining(deadline)) {
         Ok(None) => Ok(capture),
         Ok(Some(e)) => Err(e),
-        Err(_) => {
-            capture.stop();
-            Err(timed_out("start capture"))
-        }
+        Err(_) => Err(timed_out("start capture")),
     }
 }

@@ -8,8 +8,9 @@
 //! capture thread (see `capture_ring`); its callback pushes into the shared ring.
 //!
 //! Device names are cpal `DeviceId` strings (`wasapi:{endpoint id}`); `open_device`
-//! also accepts a device's friendly name. Opening a capture (input) endpoint by name
-//! records that endpoint directly instead of looping back.
+//! also accepts the friendly name of a render (output) endpoint. Opening a capture
+//! (input) endpoint by its `DeviceId` records that endpoint directly instead of looping
+//! back.
 
 use crate::backend_errors::map_cpal_error;
 use crate::capture_ring::{spawn_capture, CaptureRing, OPEN_TIMEOUT};
@@ -70,7 +71,9 @@ fn find_device(host: &cpal::Host, name: &str) -> Result<Device, AudioError> {
     {
         return Ok(d);
     }
-    host.devices()
+    // Friendly names are matched against render endpoints only: a headset exposes a
+    // capture endpoint (its microphone) with the same name, which must not be picked.
+    host.output_devices()
         .map_err(|e| map_cpal_error(&e, name))?
         .find(|d| label(d) == name)
         .ok_or_else(|| AudioError::DeviceNotFound(name.to_string()))

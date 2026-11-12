@@ -220,6 +220,8 @@ where
                 if ready_tx.send(Ok(())).is_ok() {
                     run(guard, &thread_ring);
                 }
+                // Otherwise the caller already gave up: `guard` is dropped here, which
+                // must release (and stop) the late-opened stream.
             }
             Err(e) => {
                 let _ = ready_tx.send(Err(e));
@@ -395,6 +397,34 @@ mod tests {
         );
         assert!(matches!(r, Err(AudioError::Backend(_))));
         assert!(t0.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn late_open_drops_its_guard_without_running() {
+        struct Guard(mpsc::Sender<&'static str>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                let _ = self.0.send("guard dropped");
+            }
+        }
+        let (tx, rx) = mpsc::channel();
+        let run_tx = tx.clone();
+        let r = spawn_capture(
+            "t",
+            Duration::from_millis(20),
+            move |_| {
+                std::thread::sleep(Duration::from_millis(100));
+                Ok(Guard(tx))
+            },
+            move |_, _| {
+                let _ = run_tx.send("run");
+            },
+        );
+        assert!(matches!(r, Err(AudioError::Backend(_))));
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)).unwrap(),
+            "guard dropped"
+        );
     }
 
     #[test]
