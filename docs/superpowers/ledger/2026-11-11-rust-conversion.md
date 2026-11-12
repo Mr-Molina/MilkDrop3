@@ -308,3 +308,6 @@ Task 5.7: Note (binds Milestone 6): blur/shapes/waves/sprites/title are no-op ho
 Task 5.7: Ruling: the composite intermediate and every comp-kind pipeline target Rgba8Unorm regardless of tex_bits — the C++ composites into an 8-bit back buffer that saturates after each pass — cost if wrong: none (C++ parity).
 Task 5.7: fix round 1/5 dispatched (Important: 16-bit composite unclamped). Folded in: dynbuf reset at frame start; reject sRGB blit targets; meaningful clear test; echo/filter GPU tests.
 Task 5.7: minor (deferred): RenderSettings.tex_w/tex_h mean window as input and allocated size after new (re-snaps when cloned).
+Task 5.7: fix round 1/5 (5 addressed, 0 open; commits 3e5aa9c..ffd2049)
+Task 5.7: minor (deferred): sRGB-target panic untested; tests/frame.rs at 605 lines.
+Task 5.7: complete (commits cefb523..9c31a9d + fix ffd2049, review clean after 1 fix round)
