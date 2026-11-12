@@ -46,8 +46,10 @@ fn map_err(e: PAErr, device: Option<&str>) -> AudioError {
 
 /// A connected introspection session.
 struct Server {
-    mainloop: Mainloop,
+    // Field order matters: fields drop in declaration order, and dropping the context
+    // calls back into the mainloop's API, so the context must be freed first.
     context: Context,
+    mainloop: Mainloop,
 }
 
 impl Server {
@@ -56,18 +58,20 @@ impl Server {
             .ok_or_else(|| AudioError::Backend("cannot create PulseAudio mainloop".into()))?;
         let mut context = Context::new(&mainloop, "milkdrop")
             .ok_or_else(|| AudioError::Backend("cannot create PulseAudio context".into()))?;
-        context.connect(None, FlagSet::NOFLAGS, None).map_err(|e| {
-            match Code::try_from(e).ok() {
-                // libpulse reports an unreachable server socket with codes such as Access.
-                Some(
-                    Code::Access
-                    | Code::ConnectionRefused
-                    | Code::ConnectionTerminated
-                    | Code::NoEntity,
-                ) => AudioError::NoServer,
-                _ => map_err(e, None),
-            }
-        })?;
+        context
+            .connect(None, FlagSet::NOAUTOSPAWN, None)
+            .map_err(|e| {
+                match Code::try_from(e).ok() {
+                    // libpulse reports an unreachable server socket with codes such as Access.
+                    Some(
+                        Code::Access
+                        | Code::ConnectionRefused
+                        | Code::ConnectionTerminated
+                        | Code::NoEntity,
+                    ) => AudioError::NoServer,
+                    _ => map_err(e, None),
+                }
+            })?;
         let deadline = Instant::now() + SERVER_TIMEOUT;
         let mut authorized = false;
         loop {
@@ -334,13 +338,16 @@ impl AudioSource for PulseSource {
 }
 
 impl Drop for PulseSource {
+    /// Signals the capture thread and detaches it instead of joining: `Simple::read` has
+    /// no timeout, so a stalled server would otherwise hang the join (and, via
+    /// `TimeoutSource::drop`, application shutdown). The thread owns the `Simple` and an
+    /// `Arc` of the shared state, so detaching is sound; it exits and frees the stream
+    /// when the read returns or fails, and the process reaps it at exit.
     fn drop(&mut self) {
         if let Ok(mut r) = self.shared.ring.lock() {
             r.stop = true;
         }
         self.shared.cv.notify_all();
-        if let Some(t) = self.thread.take() {
-            let _ = t.join();
-        }
+        drop(self.thread.take());
     }
 }
