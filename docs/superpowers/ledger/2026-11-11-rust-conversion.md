@@ -187,3 +187,6 @@ Task 3.4: Ruling: libpulse-simple-binding pinned at 2.29.0 (2.30.1 doesn't exist
 Task 3.4: Note: real capture untested here (no server) — verify on a Linux desktop with `cargo run -p md-audio --example list_devices`; Simple::read has no timeout, so the pulse source's Drop is prompt only while the server delivers or errors (a stalled server could hang shutdown).
 Task 3.4: fix round 1/5 dispatched (Important: Drop joins a thread blocked in Simple::read → shutdown hang; Server drops mainloop before context → likely use-after-free). Ruling: NOAUTOSPAWN for probe/list folded in.
 Task 3.4: minor (deferred): Vec alloc under ring mutex per next_frame; eprintln! in library code; no unit tests for ring window/timeout/fresh/failed logic (inject a fake reader).
+Task 3.4: fix round 1/5 (3 addressed, 0 open; commits 6db75d8..2462a45)
+Task 3.4: minor (deferred): a detached capture thread can briefly hold the PA stream after drop (two record streams if reopened immediately).
+Task 3.4: complete (commits e8fadc3..0919af9 + fix 2462a45, review clean after 1 fix round)
