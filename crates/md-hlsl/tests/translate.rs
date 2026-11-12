@@ -146,3 +146,36 @@ fn highest_blur_comes_from_bound_blur_samplers() {
     let names: Vec<&str> = t.samplers.iter().map(|s| s.name.as_str()).collect();
     assert!(names.contains(&"sampler_blur2"), "{names:?}");
 }
+
+/// The naga-failure path of `translate` (a WGSL module naga rejects is a
+/// translator bug): line 0, col 0, and the message names naga and carries
+/// its diagnostic. The input is a known remaining gap: a float product of
+/// two constants that overflows f32 (`1e30 * 1e30`, which fxc folded to
+/// +inf) is still const-evaluated by naga. If the emitter learns to guard
+/// it, replace the input with whatever still reaches naga.
+#[test]
+fn naga_rejection_is_an_internal_error_at_line_0() {
+    let e = run(
+        ShaderKind::Warp,
+        "shader_body { float f = 1e30 * 1e30; ret = f; }",
+    )
+    .unwrap_err();
+    assert_eq!((e.line, e.col), (0, 0), "{e}");
+    assert!(
+        e.message
+            .starts_with("internal translator error: the generated WGSL failed naga validation:"),
+        "{e}"
+    );
+    assert!(e.message.contains("1e30"), "{e}");
+}
+
+/// `validate_wgsl` returns naga's rendered message for both front-end and
+/// validator failures.
+#[test]
+fn validate_wgsl_reports_naga_messages() {
+    let parse = md_hlsl::validate_wgsl("fn f( {").unwrap_err();
+    assert!(parse.contains("error"), "{parse}");
+    let valid = md_hlsl::validate_wgsl("fn f() -> i32 { return 1.5; }").unwrap_err();
+    assert!(valid.contains("error"), "{valid}");
+    md_hlsl::validate_wgsl("fn f() -> i32 { return 1; }").unwrap();
+}
