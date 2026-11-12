@@ -208,3 +208,6 @@ Task 4.1: fix round 4/5 (3 addressed, 0 open; commits ccf81ea..93526f5) — iden
 Task 4.1: Note (binds Task 4.2): match identifiers via Token::ident() / &*s — TokKind::Ident holds Arc<str>.
 Task 4.1: minor (deferred): skip_int_suffix accepts any run of u/U/l/L.
 Task 4.1: complete (commits 3673c61..e1c0b05 + fixes b6f604d, d91a93a, a635f33, 93526f5; review clean after 4 fix rounds)
+Task 4.2: Ruling (binds Task 4.6): `shader_body` parses as Decl::ShaderBody(Block) (last decl, at most one, tokens after its closing `}` dropped as the C++ split does; another `}` there is an error); 4.6 wraps on the AST, not by text rewrite (missing-`;` tolerance applies only to the last statement directly in shader_body) — cost if wrong: none.
+Task 4.2: Ruling: parser recursion capped at 128 nesting levels / expression height 512 → TranslateError; unsupported constructs error out (prototypes, vector<>/matrix<>, float1, typedef, switch, general comma operator, local structs) — none appear in the corpus or include.fx — cost if wrong: real-world presets using them fail to translate (revisit with MD_EXTRA_PRESETS on a real pack).
+Task 4.2: Note (binds Task 4.3): must handle or reject TypeKind::Texture, untyped `sampler` (SamplerKind::Any), half/double, `{…}` initializer lists, unsized arrays, constructors of any built-in type.
