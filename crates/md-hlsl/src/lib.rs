@@ -51,6 +51,24 @@ pub use typed::{TypedModule, Warning};
 pub use types::Ty;
 pub use version::PsVersion;
 
-/// This crate's version (`CARGO_PKG_VERSION`); md-render keys its shader
-/// cache with it (preflight F2) so translator upgrades invalidate entries.
+/// This crate's version (`CARGO_PKG_VERSION`); part of md-render's shader
+/// cache key (preflight F2).
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// SHA-256 (hex) of this crate's sources, `Cargo.toml` and `assets/hlsl/`,
+/// computed by `build.rs`: changes whenever the translator (or the HLSL it
+/// reads) changes, so md-render's shader cache never serves WGSL from an
+/// older translator (ledger Task 5.5 ruling).
+pub const TRANSLATOR_FINGERPRINT: &str = env!("MD_HLSL_FINGERPRINT");
+
+#[cfg(test)]
+mod fingerprint_tests {
+    #[test]
+    fn translator_fingerprint_is_a_sha256_hex() {
+        let f = super::TRANSLATOR_FINGERPRINT;
+        assert_eq!(f.len(), 64);
+        assert!(f
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()));
+    }
+}

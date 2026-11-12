@@ -2,7 +2,9 @@
 //! (memory) and, with a cache directory, once per machine (disk).
 //!
 //! Key (preflight F2): SHA-256 over the md-hlsl crate version
-//! ([`md_hlsl::VERSION`]) and everything [`md_hlsl::translate`] assembles —
+//! ([`md_hlsl::VERSION`]), the translator's build-time source fingerprint
+//! ([`md_hlsl::TRANSLATOR_FINGERPRINT`], so any translator change
+//! invalidates old entries — ledger Task 5.5 ruling) and everything [`md_hlsl::translate`] assembles —
 //! shader kind, `ps_version`, preamble and body — each length-prefixed. The
 //! assembled HLSL is a pure function of those inputs, so this is a hash of
 //! the assembled text without re-implementing the assembly.
@@ -16,10 +18,14 @@
 //! (md-render does not depend on md-platform). One file per successful
 //! translation, `<dir>/<hex key>.mdshader`, holding the whole
 //! [`Translated`] (WGSL alone loses the binding info) in a small line
-//! format (see [`encode`]) with a format header, the md-hlsl version and a
-//! SHA-256 of the WGSL. An entry that is unreadable, from another format or
-//! translator version, fails its checksum or fails naga validation is
-//! ignored and regenerated; write failures are logged and ignored.
+//! format (see [`encode`]) with a format header, the md-hlsl version, the
+//! translator fingerprint and a SHA-256 of the WGSL. An entry that is
+//! unreadable, from another format, version or translator build, fails its
+//! checksum or fails naga validation is ignored and regenerated; so is one
+//! whose module wgpu rejects (the entry is deleted first). Entries are
+//! written through a per-call unique temporary file renamed into place;
+//! temporaries older than [`STALE_TMP_SECS`] (left by a crash) are swept
+//! when the cache is created. Write failures are logged and ignored.
 
 use crate::gpu::{block_on, Gpu};
 use md_hlsl::{SamplerBinding, ShaderInput, ShaderKind, TranslateError, Translated};
@@ -27,14 +33,21 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// First line of every disk entry; bump on any format change.
-pub const CACHE_FORMAT: &str = "md-render shader cache 1";
+pub const CACHE_FORMAT: &str = "md-render shader cache 2";
 /// Memory entries kept before the map is flushed.
 pub const MAX_MEMORY_ENTRIES: usize = 512;
 /// File extension of disk entries.
 pub const CACHE_EXT: &str = "mdshader";
+/// Age after which a leftover temporary entry file is deleted.
+pub const STALE_TMP_SECS: u64 = 60;
+
+/// Per-process counter making temporary file names unique per write.
+static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// A cache key: SHA-256 of the translator inputs (see the module docs).
 pub type ShaderKey = [u8; 32];
@@ -47,7 +60,15 @@ pub fn shader_key(input: &ShaderInput) -> ShaderKey {
     };
     let version = format!("{:?}", input.ps_version);
     let mut h = Sha256::new();
-    for part in [md_hlsl::VERSION, kind, &version, input.preamble, input.body] {
+    let parts = [
+        md_hlsl::VERSION,
+        md_hlsl::TRANSLATOR_FINGERPRINT,
+        kind,
+        &version,
+        input.preamble,
+        input.body,
+    ];
+    for part in parts {
         h.update((part.len() as u64).to_le_bytes());
         h.update(part.as_bytes());
     }
@@ -77,6 +98,7 @@ fn is_word(s: &str) -> bool {
 /// ```text
 /// md-render shader cache 1
 /// md-hlsl <version>
+/// translator <md_hlsl::TRANSLATOR_FINGERPRINT>
 /// sha256 <hex of the WGSL>
 /// highest_blur <0..3>
 /// texsize <full name>                                     (repeated, in order)
@@ -86,8 +108,9 @@ fn is_word(s: &str) -> bool {
 /// ```
 pub fn encode(t: &Translated) -> Option<String> {
     let mut s = format!(
-        "{CACHE_FORMAT}\nmd-hlsl {}\nsha256 {}\nhighest_blur {}\n",
+        "{CACHE_FORMAT}\nmd-hlsl {}\ntranslator {}\nsha256 {}\nhighest_blur {}\n",
         md_hlsl::VERSION,
+        md_hlsl::TRANSLATOR_FINGERPRINT,
         sha256_hex(&t.wgsl),
         t.highest_blur
     );
@@ -126,7 +149,8 @@ fn flag(s: &str) -> Option<bool> {
 }
 
 /// Parse an [`encode`]d entry; `None` if it is malformed, from another
-/// format or md-hlsl version, or its WGSL fails the checksum. (The WGSL is
+/// format, md-hlsl version or translator build, or its WGSL fails the
+/// checksum. (The WGSL is
 /// not validated here.)
 pub fn decode(text: &str) -> Option<Translated> {
     let (head, wgsl) = text.split_once("\nwgsl\n")?;
@@ -135,6 +159,9 @@ pub fn decode(text: &str) -> Option<Translated> {
         return None;
     }
     if lines.next()? != format!("md-hlsl {}", md_hlsl::VERSION) {
+        return None;
+    }
+    if lines.next()?.strip_prefix("translator ")? != md_hlsl::TRANSLATOR_FINGERPRINT {
         return None;
     }
     if lines.next()?.strip_prefix("sha256 ")? != sha256_hex(wgsl) {
@@ -205,6 +232,9 @@ impl ShaderCache {
     /// An empty cache; `dir` enables the disk cache (created on first
     /// write).
     pub fn new(dir: Option<PathBuf>) -> ShaderCache {
+        if let Some(d) = &dir {
+            sweep_stale_tmp(d, Duration::from_secs(STALE_TMP_SECS));
+        }
         ShaderCache {
             dir,
             memory: HashMap::new(),
@@ -261,9 +291,20 @@ impl ShaderCache {
         key: &ShaderKey,
     ) -> Result<Arc<CachedShader>, TranslateError> {
         if let Some(translated) = self.read_disk(key) {
-            self.disk_hits += 1;
-            let module = create_module(gpu, &translated.wgsl)?;
-            return Ok(Arc::new(CachedShader { translated, module }));
+            match create_module(gpu, &translated.wgsl) {
+                Ok(module) => {
+                    self.disk_hits += 1;
+                    return Ok(Arc::new(CachedShader { translated, module }));
+                }
+                Err(e) => {
+                    // A bad entry must not stick: delete it and translate.
+                    if let Some(path) = self.entry_path(key) {
+                        let _ = std::fs::remove_file(&path);
+                        tracing::debug!(path = %path.display(), error = %e,
+                            "shader cache entry rejected by wgpu; regenerating");
+                    }
+                }
+            }
         }
         self.translations += 1;
         let translated = md_hlsl::translate(input)?;
@@ -288,7 +329,8 @@ impl ShaderCache {
         };
         // Write a temporary file and rename it, so a reader never sees a
         // partial entry (and a torn write fails the checksum anyway).
-        let tmp = path.with_extension(format!("tmp{}", std::process::id()));
+        let n = TMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let tmp = path.with_extension(format!("tmp{}-{n}", std::process::id()));
         let res = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
@@ -297,6 +339,30 @@ impl ShaderCache {
         if let Err(e) = res {
             let _ = std::fs::remove_file(&tmp);
             tracing::debug!(path = %path.display(), error = %e, "cannot write shader cache entry");
+        }
+    }
+}
+
+/// Delete `*.tmp*` files in `dir` last modified more than `age` ago
+/// (temporaries of writers that crashed before their rename).
+pub fn sweep_stale_tmp(dir: &Path, age: Duration) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let is_tmp = p
+            .extension()
+            .and_then(|x| x.to_str())
+            .is_some_and(|x| x.starts_with("tmp"));
+        let old = e
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|el| el > age);
+        if is_tmp && old {
+            let _ = std::fs::remove_file(&p);
         }
     }
 }
@@ -388,6 +454,9 @@ mod tests {
             decode(&text.replace(CACHE_FORMAT, "md-render shader cache 0")),
             None
         );
+        let fp = format!("translator {}", md_hlsl::TRANSLATOR_FINGERPRINT);
+        let other = format!("translator {}", "0".repeat(64));
+        assert_eq!(decode(&text.replacen(&fp, &other, 1)), None);
         let v = format!("md-hlsl {}", md_hlsl::VERSION);
         assert_eq!(decode(&text.replacen(&v, "md-hlsl 0.0.0-x", 1)), None);
         // Bad fields.
@@ -407,6 +476,24 @@ mod tests {
             decode(&text.replace("texsize_main", "texsize_main extra")),
             None
         );
+    }
+
+    #[test]
+    fn sweep_removes_only_stale_temporaries() {
+        let d = std::env::temp_dir().join(format!("md-render-sweep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        for f in ["a.tmp1-0", "b.mdshader"] {
+            std::fs::write(d.join(f), "x").unwrap();
+        }
+        // Nothing is older than an hour.
+        sweep_stale_tmp(&d, Duration::from_secs(3600));
+        assert!(d.join("a.tmp1-0").exists());
+        // Everything is older than zero seconds; only the temporary goes.
+        std::thread::sleep(Duration::from_millis(20));
+        sweep_stale_tmp(&d, Duration::ZERO);
+        assert!(!d.join("a.tmp1-0").exists() && d.join("b.mdshader").exists());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

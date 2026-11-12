@@ -309,6 +309,30 @@ fn cache_hit_skips_translation() {
     });
     r4.load_preset(&pr).expect("load");
     assert_eq!(r4.shader_cache().translations(), 0, "rewritten entries hit");
+
+    // An entry written by another translator build (different fingerprint
+    // in its header) is ignored and regenerated with the current one.
+    let fp = format!("translator {}", md_hlsl::TRANSLATOR_FINGERPRINT);
+    for f in std::fs::read_dir(&dir).unwrap() {
+        let path = f.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains(&fp), "header carries the fingerprint");
+        let other = format!("translator {}", "0".repeat(64));
+        std::fs::write(&path, text.replacen(&fp, &other, 1)).unwrap();
+    }
+    let mut s5 = settings();
+    s5.shader_cache_dir = Some(dir.clone());
+    let mut r5 = renderer(&gpu, s5);
+    r5.load_preset(&pr).expect("load");
+    assert_eq!(r5.shader_cache().translations(), 2);
+    assert_eq!(r5.shader_cache().disk_hits(), 0);
+    for f in std::fs::read_dir(&dir).unwrap() {
+        let text = std::fs::read_to_string(f.unwrap().path()).unwrap();
+        assert!(
+            text.contains(&fp),
+            "regenerated with the current fingerprint"
+        );
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -364,11 +388,13 @@ fn missing_user_texture_binds_fallback_and_logs_once() {
     // `texsize_no_such_texture_anywhere` is declared but never read, so it
     // is not bound.
     assert!(comp.texsize_values.is_empty());
-    // Renders with the 1x1 white fallback: main (black) + white * 0.2.
+    // Renders with the opaque black 1x1 fallback: main (grey 0.5) +
+    // black * 0.2 = main (a white fallback would give 0.7 -> 179).
+    clear(&gpu, r.vs(1), [0.5, 0.5, 0.5, 1.0]);
     let img = draw(&gpu, comp, 1, r.vs(0));
     let c = px(&img, 20, 20);
     assert!(
-        near(c[0], 51, 1) && near(c[1], 51, 1) && near(c[2], 51, 1),
+        near(c[0], 128, 1) && near(c[1], 128, 1) && near(c[2], 128, 1),
         "{c:?}"
     );
 }

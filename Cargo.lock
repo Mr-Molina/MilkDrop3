@@ -830,6 +830,7 @@ dependencies = [
  "md-testkit",
  "naga",
  "proptest",
+ "sha2",
 ]
 
 [[package]]

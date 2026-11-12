@@ -14,9 +14,11 @@
 //! - anything else → [`TextureStore`]'s disk texture of that name.
 //!
 //! The C++ compares `main`/`blurN` case-sensitively (`wcscmp`); so does
-//! this. A texture that cannot be found or decoded binds the 1×1 white
-//! fallback and is logged ONCE per renderer at WARN (Review Focus #1; the
-//! C++ aborted the rest of `CacheParams` with an on-screen error). A
+//! this. A texture that cannot be found or decoded binds the opaque black
+//! 1×1 fallback `(0, 0, 0, 255)` — the C++ bound no texture there, and
+//! D3D9 samples an unbound stage as black (ledger Task 5.5 ruling) — and
+//! is logged ONCE per renderer at WARN (Review Focus #1; the C++ aborted
+//! the rest of `CacheParams` with an on-screen error). A
 //! binding whose dimension does not match what the root provides (a volume
 //! sampled with `tex2D`, `main` with `tex3D`) binds the fallback of the
 //! shader's dimension — D3D9 left that undefined.
@@ -88,7 +90,7 @@ impl<R: rand_core::Rng> Resolver<'_, R> {
     fn warn_once(&mut self, name: &str, why: &str) {
         if self.warned.insert(name.to_lowercase()) {
             tracing::warn!(texture = %name, reason = %why,
-                "preset texture unavailable; binding the 1x1 white fallback");
+                "preset texture unavailable; binding the 1x1 black fallback");
         }
     }
 

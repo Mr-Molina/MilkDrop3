@@ -165,7 +165,8 @@ impl Renderer {
             .iter()
             .map(|&(bw, bh)| Texture2d::new_target(&gpu, bw.min(max), bh.min(max), format, false))
             .collect();
-        let white = [255u8; 4];
+        // Unbound D3D9 stages sample opaque black (ledger Task 5.5 ruling).
+        let black = [0, 0, 0, 255u8];
         Ok(Renderer {
             textures: TextureStore::new(&gpu, seed),
             pipelines: PipelineCache::new(),
@@ -174,8 +175,8 @@ impl Renderer {
             rng: rand_pcg::Pcg32::seed_from_u64(seed ^ 0x6d64_7261_6e64_7478),
             last_errors: Vec::new(),
             warned_textures: HashSet::new(),
-            fallback_2d: Texture2d::from_rgba8(&gpu, 1, 1, &white, false),
-            fallback_3d: Texture3d::from_rgba8(&gpu, 1, 1, 1, &white, false),
+            fallback_2d: Texture2d::from_rgba8(&gpu, 1, 1, &black, false),
+            fallback_3d: Texture3d::from_rgba8(&gpu, 1, 1, 1, &black, false),
             vs,
             blur,
             settings,
