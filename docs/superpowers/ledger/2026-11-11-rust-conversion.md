@@ -243,3 +243,5 @@ Controller: milestone-4-context.md (workspace copy) annotated with the F24 matri
 Task 4.4: fix round 1/5 (4 addressed, 0 open; commits 5883af0..fc00132)
 Task 4.4: minor (deferred): struct reachability not tested for a struct used only in a for-init declaration.
 Task 4.4: complete (commits cf76d39..710f53d + fix fc00132, review clean after 1 fix round)
+Task 4.6: Ruling: ps_version does not affect translation (None/2_0/2_X/3_0 identical); Ps4_0 is a TranslateError because MilkDrop could not compile ps_4_0 — cost if wrong: PSVERSION 4 presets fall back (note: md-preset clamps 6+ → Ps4_0). Translated gains highest_blur; parse_wrapped/validate_wgsl are public. Inserted wrapper lines are not subject to body-defined macros (documented).
+Task 4.7: Ruling: only one fixup was needed (strip `//` comments as the C++ StripComments did, so a trailing `\` doesn't continue the line); every other brief idiom is covered by earlier tasks and has a fixture test — cost if wrong: none.
