@@ -284,3 +284,5 @@ Task 5.4: Note (binds Task 5.5/7.x): call TextureStore::preset_loaded() after ev
 Task 5.4: Ruling (AMENDS F32): plugin.cpp:3158-3215's extension loop has no `break`, so every existing candidate is loaded and the LAST successfully decoded one wins, while failed loads fall through — mirror that observable behaviour (C++ loop order; last decodable candidate wins; error only if none decodes) — cost if wrong: a folder holding x.jpg and x.png shows the png as MilkDrop did.
 Task 5.4: fix round 1/5 dispatched (Important: decode failure must fall through; plus last-wins amendment; u32 size overflow).
 Task 5.4: minor (deferred): find_in_dir re-reads the directory per probe; A8/palettized DDS unsupported; DDS embedded mips discarded; temp dirs not cleaned; RED via mutation.
+Task 5.4: fix round 1/5 (3 addressed, 0 open; commits 87bce0a..29a8c96)
+Task 5.4: complete (commits d4cc416..7be0a3e + fix 29a8c96, review clean after 1 fix round)
