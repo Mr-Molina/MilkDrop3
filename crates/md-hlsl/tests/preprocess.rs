@@ -123,3 +123,31 @@ fn exponential_expansion_is_an_error() {
     assert!(e.message.contains("too large"), "{e}");
     assert!(t.elapsed().as_secs() < 10);
 }
+
+#[test]
+fn expansion_budget_is_shared_across_segments() {
+    // Each segment expands to 2^18 tokens (under any per-segment cap) but the
+    // directives between them used to reset the budget.
+    let mut src = String::from("#define D0 x\n");
+    for i in 1..=18 {
+        src.push_str(&format!("#define D{i} D{} D{}\n", i - 1, i - 1));
+    }
+    for k in 0..40 {
+        src.push_str(&format!("D18\n#define Z{k} 0\n"));
+    }
+    let t = std::time::Instant::now();
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("too large"), "{e}");
+    assert!(t.elapsed().as_secs() < 10);
+}
+
+#[test]
+fn budget_is_ample_for_include_fx_and_corpus_sized_input() {
+    let inc = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../assets/hlsl/include.fx"
+    ))
+    .unwrap();
+    // include.fx repeated 20 times (with redefinitions) still fits.
+    preprocess_tokens(&inc.repeat(20)).unwrap();
+}

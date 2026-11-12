@@ -38,6 +38,7 @@ type Macros = HashMap<String, Macro>;
 pub fn preprocess_tokens(src: &str) -> Result<Vec<Token>, TranslateError> {
     let chars = clean(src)?;
     let mut macros = Macros::new();
+    let mut limits = Limits { produced: 0 };
     let mut out = Vec::new();
     let mut segment: Vec<Token> = Vec::new();
     for line in chars.split(|c| c.c == '\n') {
@@ -46,13 +47,13 @@ pub fn preprocess_tokens(src: &str) -> Result<Vec<Token>, TranslateError> {
             Some(f) if line[f].c == '#' => {
                 // A directive ends the current text segment: expand it with
                 // the macro table as it stood.
-                flush(&mut segment, &macros, &mut out)?;
+                flush(&mut segment, &macros, &mut limits, &mut out)?;
                 directive(&line[f..], &mut macros)?;
             }
             _ => segment.extend(lex(line)?),
         }
     }
-    flush(&mut segment, &macros, &mut out)?;
+    flush(&mut segment, &macros, &mut limits, &mut out)?;
     Ok(out)
 }
 
@@ -81,13 +82,14 @@ pub fn preprocess(src: &str) -> Result<String, TranslateError> {
 fn flush(
     segment: &mut Vec<Token>,
     macros: &Macros,
+    limits: &mut Limits,
     out: &mut Vec<Token>,
 ) -> Result<(), TranslateError> {
     if segment.is_empty() {
         return Ok(());
     }
     let toks = std::mem::take(segment);
-    out.extend(expand(&toks, macros, &mut Vec::new())?);
+    out.extend(expand(&toks, macros, &mut Vec::new(), limits)?);
     Ok(())
 }
 
@@ -186,9 +188,10 @@ fn define(line: &[Ch], after: usize, hash: Ch, macros: &mut Macros) -> Result<()
 /// Maximum macro-expansion nesting (replacement rescans plus argument
 /// pre-expansion). Far above `include.fx` (depth 2) and any real preset.
 const MAX_DEPTH: usize = 128;
-/// Maximum tokens produced by expansion in one `preprocess_tokens` call
-/// (counted across all nesting levels). `include.fx` plus a large preset is
-/// a few thousand; this stops exponential ("billion laughs") expansion.
+/// Maximum tokens examined by expansion in one `preprocess_tokens` call: one
+/// budget for the whole input, counting every token at every nesting level
+/// (so pass-through tokens and argument copies count too). `include.fx` is about
+/// 1-2 thousand tokens and corpus shaders a few thousand more; this stops exponential ("billion laughs") expansion.
 const MAX_TOKENS: usize = 2_000_000;
 
 /// A token plus the C "painted blue" mark: an identifier met while its own
@@ -207,6 +210,7 @@ fn expand(
     toks: &[Token],
     macros: &Macros,
     active: &mut Vec<String>,
+    limits: &mut Limits,
 ) -> Result<Vec<Token>, TranslateError> {
     let input: Vec<PTok> = toks
         .iter()
@@ -215,8 +219,7 @@ fn expand(
             blue: false,
         })
         .collect();
-    let mut limits = Limits { produced: 0 };
-    let out = expand_p(&input, macros, active, 0, &mut limits)?;
+    let out = expand_p(&input, macros, active, 0, limits)?;
     Ok(out.into_iter().map(|p| p.tok).collect())
 }
 
