@@ -55,11 +55,12 @@ fn check_version(v: PsVersion) -> Result<(), TranslateError> {
 }
 
 fn assembled(input: &ShaderInput) -> Assembled {
-    assemble(input.kind, input.preamble, input.body)
+    let body = crate::apply_fixups(input.body);
+    assemble(input.kind, input.preamble, &body)
 }
 
 /// The wrapped AST `translate` type-checks: preamble + defines + body
-/// parsed, with `shader_body` turned into `void PS(...)`. For tests and diagnostics. Errors are body-relative like
+/// (after [`crate::apply_fixups`]) parsed, with `shader_body` turned into `void PS(...)`. For tests and diagnostics. Errors are body-relative like
 /// [`translate`]'s; positions inside the returned module refer to the
 /// assembled source (preamble first).
 pub fn parse_wrapped(input: &ShaderInput) -> Result<Module, TranslateError> {

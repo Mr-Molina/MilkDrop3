@@ -17,6 +17,7 @@ mod emit_expr;
 mod emit_place;
 mod emit_stmt;
 mod error;
+mod fixups;
 mod intrinsics;
 pub mod layout;
 mod lexer;
@@ -36,6 +37,7 @@ pub use bindings::{
 };
 pub use emit::{emit, ShaderKind};
 pub use error::TranslateError;
+pub use fixups::apply_fixups;
 pub use intrinsics::{Intrinsic, SigClass};
 pub use lexer::tokenize;
 pub use parser::parse;
