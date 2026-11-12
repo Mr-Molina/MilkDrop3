@@ -1,6 +1,6 @@
 //! Corpus smoke test: preprocess + tokenize every corpus preset's warp and
 //! comp shader text prepended with `include.fx`, plus the shipped default
-//! shader bodies.
+//! shader bodies; and (Task 4.2) parse the same inputs.
 
 use md_preset::parse_milk;
 
@@ -44,6 +44,50 @@ fn every_corpus_shader_tokenizes() {
         }
     }
     assert!(shaders >= 60, "{shaders}");
+    assert!(
+        failures.is_empty(),
+        "{} failures:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+/// Task 4.2: include.fx + every corpus shader text (and the shipped defaults)
+/// parses, and the body yields exactly one trailing `shader_body` decl — the
+/// raw form Task 4.6 wraps into `void PS(...)`.
+#[test]
+fn every_corpus_shader_parses() {
+    use md_hlsl::ast::Decl;
+    let inc = asset("include.fx");
+    let mut bodies = vec![
+        ("warp_ps.fx".to_string(), asset("warp_ps.fx")),
+        ("comp_ps.fx".to_string(), asset("comp_ps.fx")),
+    ];
+    for path in md_testkit::corpus_presets() {
+        let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
+        let preset = parse_milk(&text).unwrap();
+        bodies.push((format!("{} warp", path.display()), preset.warp_shader));
+        bodies.push((format!("{} comp", path.display()), preset.comp_shader));
+    }
+    assert!(bodies.len() >= 62, "{}", bodies.len());
+    let mut failures = Vec::new();
+    for (what, body) in &bodies {
+        let src = format!("{inc}\n{body}");
+        let parsed = md_hlsl::preprocess_tokens(&src).and_then(|t| md_hlsl::parse(&t));
+        match parsed {
+            Ok(m) => {
+                let n = m
+                    .decls
+                    .iter()
+                    .filter(|d| matches!(d, Decl::ShaderBody(_)))
+                    .count();
+                if n != 1 || !matches!(m.decls.last(), Some(Decl::ShaderBody(_))) {
+                    failures.push(format!("{what}: {n} shader_body decls"));
+                }
+            }
+            Err(e) => failures.push(format!("{what}: {e}")),
+        }
+    }
     assert!(
         failures.is_empty(),
         "{} failures:\n{}",
