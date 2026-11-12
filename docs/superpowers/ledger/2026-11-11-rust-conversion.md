@@ -177,3 +177,5 @@ Task 3.1: complete (commits 635f19f..ed1df4b, review clean)
 Task 3.2: complete (commits ed1df4b..b1835c5, review clean)
 Task 3.6: Ruling: TimeoutSource is non-generic (`TimeoutSource::new<S: AudioSource + 'static>(inner)`, inner runs on one worker thread); a late frame is prefetched and delivered on the next call, not dropped; Ended is sticky; Drop joins the worker (inner sources must honour the 20 ms worker timeout) — cost if wrong: trivial API change.
 Task 3.3: Note: DeviceInfo { name, description, is_default }; loopback.rs holds per-OS stub `platform` modules that 3.4/3.5 replace.
+Tasks 3.3/3.6: fix round 1/5 dispatched (Important: inner-source panic swallowed into permanent Silence). Ruling: minors 2-4 (checked_add deadline, vacuous analyzer assertion, missing resampler/format edge tests) folded into the same round — cheap and they close the reviewer's unproven risks — cost if wrong: slightly larger fix diff.
+Tasks 3.3/3.6: minor (deferred): Drop hangs if an inner source ignores its timeout (3.4/3.5 backends must honour 20 ms); three identical platform stub modules; prefetch makes live frames up to one frame stale; 3.3 no RED run.
