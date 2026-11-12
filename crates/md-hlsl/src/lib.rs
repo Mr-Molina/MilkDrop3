@@ -6,7 +6,9 @@
 //! a [`typed::TypedModule`] over [`types::Ty`]. Task 4.5 adds
 //! [`resolve_bindings`] (sampler slots and `texsize_*` names). Task 4.4 adds
 //! the WGSL emitter [`emit`] and the shared uniform [`layout`]. Task 4.6
-//! adds the wrapper assembly and the public entry point [`translate`].
+//! adds the wrapper assembly and the public entry point [`translate`];
+//! Task 4.7 the legacy source fixups [`apply_fixups`] it applies to the
+//! preset body (including `plugin.cpp::StripComments`).
 #![forbid(unsafe_code)]
 
 pub mod ast;
