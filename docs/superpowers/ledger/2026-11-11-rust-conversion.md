@@ -245,3 +245,6 @@ Task 4.4: minor (deferred): struct reachability not tested for a struct used onl
 Task 4.4: complete (commits cf76d39..710f53d + fix fc00132, review clean after 1 fix round)
 Task 4.6: Ruling: ps_version does not affect translation (None/2_0/2_X/3_0 identical); Ps4_0 is a TranslateError because MilkDrop could not compile ps_4_0 — cost if wrong: PSVERSION 4 presets fall back (note: md-preset clamps 6+ → Ps4_0). Translated gains highest_blur; parse_wrapped/validate_wgsl are public. Inserted wrapper lines are not subject to body-defined macros (documented).
 Task 4.7: Ruling: only one fixup was needed (strip `//` comments as the C++ StripComments did, so a trailing `\` doesn't continue the line); every other brief idiom is covered by earlier tasks and has a fixture test — cost if wrong: none.
+Tasks 4.6/4.7: minor (deferred → Task 4.9/4.10): naga-failure path reachable but untested (`int a = 1 << 40;`, `5 / N` with static const N = 0 → "internal translator error"); emitter should fold/guard constant shift overflow and constant division by zero as fxc did; StripComments edge cases `*//` and `/*/` differ; WARP_PARAMS duplicated in tests/common; crate doc omits apply_fixups.
+Task 4.6: complete (commits 7e494cb..020b0d3, review clean)
+Task 4.7: complete (commits 020b0d3..23d324c, review clean)

@@ -634,11 +634,11 @@ Output contract (consumed by Milestone 5): one WGSL module with `@fragment fn fs
 **Interfaces:**
 - Produces: `translate` as in A.3, composing preamble + defines + wrapped body, preprocess, lex, parse, check, bindings, emit, then naga validation; a naga validation failure is returned as `TranslateError` with the naga message, since it indicates a translator bug.
 
-- [ ] **Step 1:** Write failing tests `default_warp_shader_translates`, `default_comp_shader_translates`, `shader_body_missing_is_error`, `comp_defines_hue_shader`, `warp_uv_orig_is_zw_and_comp_uv_orig_is_xy`.
-- [ ] **Step 2:** Run the tests. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(hlsl): wrapper assembly and translate entry point`
+- [x] **Step 1:** Write failing tests `default_warp_shader_translates`, `default_comp_shader_translates`, `shader_body_missing_is_error`, `comp_defines_hue_shader`, `warp_uv_orig_is_zw_and_comp_uv_orig_is_xy`.
+- [x] **Step 2:** Run the tests. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(hlsl): wrapper assembly and translate entry point`
 
 ### Task 4.7: Legacy fixups
 
@@ -648,11 +648,11 @@ Output contract (consumed by Milestone 5): one WGSL module with `@fragment fn fs
 **Interfaces:**
 - Produces: `pub fn apply_fixups(src: &str) -> String`, run before lexing, with one rule per known corpus idiom: trailing `;` after `}` of the body, `float2 x = float2(a);` single-arg vector constructors (splat), use of `uv_orig` in comp (alias of `uv`), `tex2D(sampler_main, uv).xyz;` where `ret` is `float3`, assignment of `float4` texture results to `ret` (`ret = tex2D(...)` -> truncation handled by Task 4.3), `#define` redefinition, `//` comments ending with `\` (not a continuation in fxc), and identifiers that are WGSL keywords.
 
-- [ ] **Step 1:** Write one test per fixup, each loading a fixture and asserting `translate` succeeds.
-- [ ] **Step 2:** Run the tests. Expected: FAIL.
-- [ ] **Step 3:** Implement; each fixup is a function with a doc comment citing an example preset from the corpus.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(hlsl): corpus fixups`
+- [x] **Step 1:** Write one test per fixup, each loading a fixture and asserting `translate` succeeds.
+- [x] **Step 2:** Run the tests. Expected: FAIL.
+- [x] **Step 3:** Implement; each fixup is a function with a doc comment citing an example preset from the corpus.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(hlsl): corpus fixups`
 
 ### Task 4.8: Built-in WGSL passes
 
