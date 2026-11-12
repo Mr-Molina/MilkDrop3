@@ -16,6 +16,7 @@ use crate::preset_gpu::{PresetGpu, PresetLayouts, ProgramSpec, ProgramTargets, S
 use crate::shader_cache::ShaderCache;
 use crate::texture::{Texture2d, Texture3d};
 use crate::textures::TextureStore;
+use crate::warp::WarpBuffers;
 use md_hlsl::{PsVersion, ShaderInput, ShaderKind, TranslateError};
 use md_preset::Preset;
 use rand_core::SeedableRng;
@@ -130,15 +131,19 @@ pub fn blur_texture_sizes(w: u32, h: u32) -> [(u32, u32); 6] {
 
 /// The MilkDrop renderer.
 pub struct Renderer {
-    gpu: Gpu,
-    settings: RenderSettings,
-    vs: [Texture2d; 2],
+    pub(crate) gpu: Gpu,
+    pub(crate) settings: RenderSettings,
+    pub(crate) vs: [Texture2d; 2],
+    /// Index of the ping-pong texture the warp pass draws into this frame
+    /// (the C++'s `m_lpVS[1]`); the other one is its source (`m_lpVS[0]`).
+    pub(crate) vs_target: usize,
     blur: Vec<Texture2d>,
     textures: TextureStore,
-    pipelines: PipelineCache,
+    pub(crate) pipelines: PipelineCache,
     shaders: ShaderCache,
     layouts: PresetLayouts,
-    rng: rand_pcg::Pcg32,
+    pub(crate) rng: rand_pcg::Pcg32,
+    pub(crate) warp_buffers: Option<WarpBuffers>,
     last_errors: Vec<RenderError>,
     warned_textures: HashSet<String>,
     fallback_2d: Texture2d,
@@ -178,6 +183,8 @@ impl Renderer {
             fallback_2d: Texture2d::from_rgba8(&gpu, 1, 1, &black, false),
             fallback_3d: Texture3d::from_rgba8(&gpu, 1, 1, 1, &black, false),
             vs,
+            vs_target: 0,
+            warp_buffers: None,
             blur,
             settings,
             gpu,
@@ -202,6 +209,22 @@ impl Renderer {
     /// `sampler_main`.
     pub fn other_vs(target: usize) -> usize {
         1 - (target & 1)
+    }
+
+    /// The ping-pong texture the warp pass draws into this frame (0 until
+    /// [`Renderer::swap_vs`]); it reads [`Renderer::other_vs`] of it.
+    /// The C++ draws `m_lpVS[0]` into `m_lpVS[1]` and swaps the pointers at
+    /// the end of the frame (milkdropfs.cpp:983-990, 1134-1136); md-render
+    /// keeps the textures in place (preset bind groups reference them by
+    /// index) and swaps this index instead.
+    pub fn warp_target(&self) -> usize {
+        self.vs_target
+    }
+
+    /// End-of-frame ping-pong flip (milkdropfs.cpp:1134-1136): this frame's
+    /// warp target becomes the next frame's warp source.
+    pub fn swap_vs(&mut self) {
+        self.vs_target = Renderer::other_vs(self.vs_target);
     }
 
     /// Blur texture `i` (0..6; presets read 1, 3, 5). Placeholders until

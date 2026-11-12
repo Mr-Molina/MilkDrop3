@@ -19,14 +19,23 @@
 //! translates the preset's shaders through the [`ShaderCache`] (memory and
 //! disk), falls back to the default shaders on error, resolves every
 //! sampler ([`SlotSource`]) and builds a [`ShaderProgram`] per shader.
+//!
+//! Task 5.6: the [`WarpMesh`] (mesh set-up and per-frame UVs, with the
+//! [`PerFrameVars`] / [`PerPixelVars`] / [`PerPixelRunner`] md-core fills,
+//! F37), blend patterns ([`randomize_blend_pattern`]), `ApplyShaderParams`
+//! ([`shader_uniforms`], shared with the composite pass) and
+//! [`Renderer::warp_pass`].
 #![forbid(unsafe_code)]
 
 mod blend;
+mod blendpattern;
 mod bytes;
 mod dynbuf;
 mod fixed;
+mod frame_vars;
 mod gpu;
 mod image_load;
+mod mesh;
 mod mips;
 pub mod noise;
 mod pipelines;
@@ -35,18 +44,25 @@ mod preset_gpu;
 mod readback;
 mod renderer;
 mod shader_cache;
+mod shader_params;
 mod texcache;
 mod texture;
 mod textures;
 mod uniforms;
 mod vertex;
+mod warp;
 
 pub use blend::BlendMode;
+pub use blendpattern::{blend_pattern, frand, gen_plasma, randomize_blend_pattern, BlendPattern};
 pub use dynbuf::DynamicVertexBuffer;
 pub use fixed::{fan_to_list, points_to_quads, FixedMode, SamplerKind, Topo};
+pub use frame_vars::PerFrameVars;
 pub use gpu::{gpu_or_skip, headless_device, headless_gpu, Gpu};
 pub use image_load::{load_image, ImageError};
-pub use mips::generate_mips;
+pub use mesh::{
+    mesh_aspect, PerPixelRunner, PerPixelVars, VertInfo, WarpMesh, MAX_GRID_X, MAX_GRID_Y,
+};
+pub use mips::{generate_mips, record_mips};
 pub use pipelines::{DrawBatch, PipelineCache, PipelineKey};
 pub use preset_bind::{sampler_kind, SlotSource};
 pub use preset_gpu::{PresetGpu, ShaderProgram};
@@ -59,6 +75,10 @@ pub use shader_cache::{
     decode as decode_cache_entry, encode as encode_cache_entry, shader_key, CachedShader,
     ShaderCache, ShaderKey, CACHE_EXT, CACHE_FORMAT, MAX_MEMORY_ENTRIES,
 };
+pub use shader_params::{
+    random_rot_matrix, randomize_preset_vars, safe_blur_min_max, shader_uniforms,
+    FrameShaderInputs, PresetShaderInputs, RotParams,
+};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
 pub use textures::{
@@ -67,6 +87,10 @@ pub use textures::{
 };
 pub use uniforms::{pack_mat4x3, texsizes_bytes, BlurUniforms, MdUniforms, VsParams};
 pub use vertex::{vertices_to_bytes, Vertex};
+pub use warp::{
+    decay_byte, plan_warp_passes, snap_point, warp_geometry, Cull, WarpGeometry, WarpPassPlan,
+    WarpPreset,
+};
 
 pub use image::RgbaImage;
 pub use wgpu;

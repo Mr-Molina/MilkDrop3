@@ -142,13 +142,25 @@ pub fn generate_mips(gpu: &Gpu, tex: &Texture2d) {
     if tex.mips <= 1 {
         return;
     }
+    let mut enc = gpu
+        .device()
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("md-render generate_mips"),
+        });
+    record_mips(gpu, &mut enc, tex);
+    gpu.queue().submit([enc.finish()]);
+}
+
+/// Record the passes of [`generate_mips`] into `enc` (after the passes that
+/// draw level 0, e.g. the warp pass) without submitting.
+pub fn record_mips(gpu: &Gpu, enc: &mut wgpu::CommandEncoder, tex: &Texture2d) {
+    if tex.mips <= 1 {
+        return;
+    }
     let device = gpu.device();
     let mut guard = gpu.mips.inner.lock().unwrap_or_else(|e| e.into_inner());
     let blit = guard.get_or_insert_with(|| MipBlit::new(device));
     let pipeline = blit.pipeline(device, tex.format);
-    let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("md-render generate_mips"),
-    });
     for level in 1..tex.mips {
         let src = tex.level_view(level - 1);
         let dst = tex.level_view(level);
@@ -186,7 +198,6 @@ pub fn generate_mips(gpu: &Gpu, tex: &Texture2d) {
         pass.set_bind_group(0, &bind, &[]);
         pass.draw(0..3, 0..1);
     }
-    gpu.queue().submit([enc.finish()]);
 }
 
 #[cfg(test)]
