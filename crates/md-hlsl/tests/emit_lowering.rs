@@ -383,3 +383,20 @@ fn round_stays_wgsl_round() {
     let w = emit_ok("", "_return_value = round(_c0.x) + round(_c1);");
     has(&w, &["round(U._c0.x)", "round(U._c1)"]);
 }
+
+/// Found by Task 4.10's typed soup: WGSL has no `<`/`>`/`<=`/`>=` on
+/// `bool`; HLSL compares bools as 0/1 (SM2/3 held them as floats), so the
+/// operands are converted to `i32` first.
+#[test]
+fn bool_relational_operators_compare_as_integers() {
+    let w = emit_ok(
+        "",
+        "bool a = _c0.x > 0; bool c = a < true; _return_value = c;",
+    );
+    has(&w, &["(i32(h_a) < i32(true))"]);
+    let w = emit_ok(
+        "",
+        "bool2 a = _c0.xy > 0; bool2 c = a >= a; _return_value = c.xyxy;",
+    );
+    has(&w, &["(vec2<i32>(h_a) >= vec2<i32>(h_a))"]);
+}

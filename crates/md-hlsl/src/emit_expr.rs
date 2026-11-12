@@ -19,7 +19,8 @@
 //!   constant zero divisor, a shift amount of 32 or more, ...) goes
 //!   through a `var` so the operation is not const-evaluated (a WGSL
 //!   shader-creation error) — see [`Fx::guard_rhs`] for the values;
-//! - shifts convert the amount to `u32`; `&&`/`||` stay `&&`/`||` on
+//! - shifts convert the amount to `u32`; `<`, `>`, `<=`, `>=` on bools
+//!   compare them as `i32` (WGSL orders no bools); `&&`/`||` stay `&&`/`||` on
 //!   scalars (their operands' side effects are hoisted, so both are always
 //!   evaluated, as fxc does) and become `&`/`|` on `bool` vectors;
 //! - `?:` is `select(else, then, cond)` (vector conditions select
@@ -299,6 +300,14 @@ impl Fx<'_, '_> {
                     format!("operator `{sym}` on matrices is not supported"),
                 );
             }
+        }
+        if matches!(op, Lt | Gt | Le | Ge) && ty.elem() == Some(Scalar::Bool) {
+            // WGSL orders no bools; HLSL compares them as 0/1.
+            let i = match ty.shape() {
+                Some(Shape::Vec(n)) => format!("vec{n}<i32>"),
+                _ => "i32".to_string(),
+            };
+            return Ok(format!("({i}({a}) {sym} {i}({b}))"));
         }
         if matches!(op, Shl | Shr) {
             let u = match ty.shape() {
