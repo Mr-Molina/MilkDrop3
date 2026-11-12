@@ -183,3 +183,5 @@ Tasks 3.3/3.6: fix round 1/5 (4 addressed, 0 open; commits dec6b5a..5b4a29e)
 Tasks 3.3/3.6: Note: catch_unwind is a no-op under panic=abort — keep release profiles on unwind (or accept that an audio-thread panic aborts).
 Task 3.3: complete (commits c0e46c4..d97db11 + fix 5b4a29e, review clean after 1 fix round)
 Task 3.6: complete (commits d97db11..92b980c + fix 5b4a29e, review clean after 1 fix round)
+Task 3.4: Ruling: libpulse-simple-binding pinned at 2.29.0 (2.30.1 doesn't exist); an unreachable-socket "Access" error before authorization maps to NoServer; open_device probes with an introspection connect first — cost if wrong: misleading error text in rare auth failures.
+Task 3.4: Note: real capture untested here (no server) — verify on a Linux desktop with `cargo run -p md-audio --example list_devices`; Simple::read has no timeout, so the pulse source's Drop is prompt only while the server delivers or errors (a stalled server could hang shutdown).
