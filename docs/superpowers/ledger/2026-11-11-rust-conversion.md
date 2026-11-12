@@ -225,3 +225,7 @@ Task 4.3: Ruling: writes to non-static, non-sampler globals are ALLOWED (legacy 
 Task 4.3: Ruling: `dot(float, float)` allowed (documented in the authoring guide); 4.4 lowers it to a*b.
 Task 4.3: fix round 1/5 dispatched (scalar dot; benign redeclaration; writable globals; compound-assign single evaluation folded in).
 Task 4.3: minor (deferred): `noisevol` name heuristic for unused untyped samplers undocumented in M4 context.
+Task 4.3: fix round 1/5 (5 addressed, 0 open; commits 7bef610..433cacc)
+Task 4.3: Note (binds Task 4.4): TExprKind::Assign keeps compound form with `op_ty`; emit `*p = L((O)*p op rhs)` evaluating the lhs place once; globals with TGlobal.written need a function-private copy initialised at PS start; scalar dot lowers to a*b.
+Task 4.3: complete (commits acc48b4..be28b54 + fix 433cacc, review clean after 1 fix round)
+Next: Task 4.5 runs BEFORE Task 4.4 (preflight F25).
