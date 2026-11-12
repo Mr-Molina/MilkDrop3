@@ -35,8 +35,15 @@
 //! | everything else | same name (`round`, `step`, `smoothstep`, `atan2`, `any`, `all`, …) |
 //!
 //! A texture coordinate used twice (`c.xy`, `c.w`) is captured in a
-//! temporary unless it is a plain variable. `round` keeps WGSL's
-//! round-half-to-even (HLSL documents half away from zero).
+//! temporary unless it is a plain variable.
+//!
+//! `round` keeps WGSL's round-half-to-even (Task 4.9 decision). HLSL
+//! documents half away from zero; SM2/3 has no rounding instruction, so
+//! fxc expanded `round` (possibly to `floor(x + 0.5)`, which differs from
+//! both at negative halves), but nothing in `code/`, `assets/hlsl/` or the
+//! corpus uses `round` and fxc's expansion cannot be checked here, so
+//! there is no evidence to emit anything else. The outputs differ only at
+//! exact `.5` inputs; the golden suite decides if a preset ever shows it.
 
 use crate::emit::{err, R};
 use crate::emit_stmt::{has_effects, Fx};

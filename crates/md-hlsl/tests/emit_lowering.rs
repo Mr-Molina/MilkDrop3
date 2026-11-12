@@ -375,3 +375,11 @@ fn only_reachable_structs_are_emitted() {
     has(&w, &["struct h_Outer {", "struct h_Inner {"]);
     assert!(!w.contains("h_Bad") && !w.contains("h_Unused"), "{w}");
 }
+
+#[test]
+fn round_stays_wgsl_round() {
+    // Task 4.9 decision (emit_call.rs docs): no evidence for an fxc
+    // `floor(x + 0.5)` expansion, so WGSL's round (half to even) is kept.
+    let w = emit_ok("", "_return_value = round(_c0.x) + round(_c1);");
+    has(&w, &["round(U._c0.x)", "round(U._c1)"]);
+}
