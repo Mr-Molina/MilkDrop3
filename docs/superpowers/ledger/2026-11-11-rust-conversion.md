@@ -198,3 +198,4 @@ Task 3.5: fix round 1/5 (5 addressed, 0 open; commits eeadf7d..5937cc6)
 Task 3.5: minor (deferred): start-timeout edge — if Capture::drop's stop is rejected while startCapture is pending and the start then completes, the stream may keep running (send a stop from the start completion handler when the caller has given up); a never-called stop handler leaks two Retained handles.
 Task 3.5: complete (commits 3121be7..ad9be3b + fix 5937cc6, review clean after 1 fix round)
 Milestone 3: complete. Owner verification pending: real capture on Linux desktop, Windows, macOS (#[ignore]d tests + `cargo run -p md-audio --example list_devices`).
+Task 4.1: Note (binds Task 4.6): error line numbers are relative to the assembled source (include.fx + defines + body) — 4.6 must offset them to body-relative lines when reporting. Primary API is preprocess_tokens(); preprocess() String is lossy.
