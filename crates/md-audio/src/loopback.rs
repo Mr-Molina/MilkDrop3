@@ -1,5 +1,7 @@
-//! OS loopback entry points. Tasks 3.4 (Linux) and 3.5 (macOS/Windows) replace the
-//! per-OS stub module below with a real backend; the public signatures stay the same.
+//! OS loopback entry points, dispatched to the per-OS backend: PulseAudio monitor
+//! sources on Linux (`linux_pulse`), WASAPI loopback on Windows (`windows_wasapi`) and
+//! ScreenCaptureKit system audio on macOS (`macos_sck`). Other platforms get a stub that
+//! reports `AudioError::Backend`.
 
 use crate::{AudioError, AudioSource};
 
@@ -14,33 +16,24 @@ pub struct DeviceInfo {
     pub is_default: bool,
 }
 
-#[cfg(not(target_os = "linux"))]
-fn unavailable<T>() -> Result<T, AudioError> {
-    Err(AudioError::Backend(
-        "no loopback backend on this platform".into(),
-    ))
-}
-
 #[cfg(target_os = "linux")]
 use crate::linux_pulse as platform;
 
-#[cfg(target_os = "macos")]
-mod platform {
-    use super::*;
-    pub fn default_loopback() -> Result<Box<dyn AudioSource>, AudioError> {
-        unavailable()
-    }
-    pub fn list_devices() -> Result<Vec<DeviceInfo>, AudioError> {
-        unavailable()
-    }
-    pub fn open_device(_name: &str) -> Result<Box<dyn AudioSource>, AudioError> {
-        unavailable()
-    }
-}
+#[cfg(windows)]
+use crate::windows_wasapi as platform;
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+#[cfg(target_os = "macos")]
+use crate::macos_sck as platform;
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 mod platform {
     use super::*;
+
+    fn unavailable<T>() -> Result<T, AudioError> {
+        Err(AudioError::Backend(
+            "no loopback backend on this platform".into(),
+        ))
+    }
     pub fn default_loopback() -> Result<Box<dyn AudioSource>, AudioError> {
         unavailable()
     }
@@ -67,7 +60,7 @@ pub fn open_device(name: &str) -> Result<Box<dyn AudioSource>, AudioError> {
     platform::open_device(name)
 }
 
-#[cfg(all(test, not(target_os = "linux")))]
+#[cfg(all(test, not(any(target_os = "linux", target_os = "macos", windows))))]
 mod tests {
     use super::*;
 

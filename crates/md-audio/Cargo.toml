@@ -19,5 +19,17 @@ thiserror.workspace = true
 libpulse-binding.workspace = true
 libpulse-simple-binding.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+cpal.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-screen-capture-kit.workspace = true
+objc2-core-media.workspace = true
+objc2-core-audio-types.workspace = true
+block2.workspace = true
+dispatch2.workspace = true
+
 [dev-dependencies]
 md-analysis = { path = "../md-analysis" }

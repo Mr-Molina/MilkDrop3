@@ -1,10 +1,11 @@
 //! Linux loopback backend: PulseAudio / PipeWire (pipewire-pulse) monitor capture.
 //!
 //! Device discovery uses libpulse introspection over a standard mainloop; capture uses
-//! the simple API on a background thread that fills a ring buffer of the most recent
-//! [`RING_FRAMES`] stereo frames. All bindings are safe Rust over the system libpulse.
+//! the simple API on a detached background thread that fills the shared capture ring
+//! (`capture_ring`). All bindings are safe Rust over the system libpulse.
 
-use crate::{to_frame, AudioError, AudioSource, DeviceInfo, FrameStatus};
+use crate::capture_ring::{decode_f32_le, spawn_capture, CaptureRing, OPEN_TIMEOUT};
+use crate::{AudioError, AudioSource, DeviceInfo};
 use libpulse_binding::context::{Context, FlagSet, State};
 use libpulse_binding::def::BufferAttr;
 use libpulse_binding::error::{Code, PAErr};
@@ -14,23 +15,20 @@ use libpulse_binding::sample::{Format, Spec};
 use libpulse_binding::stream::Direction;
 use libpulse_simple_binding::Simple;
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 const RATE: u32 = 44_100;
 const CHANNELS: u16 = 2;
-/// Ring capacity in stereo frames.
-const RING_FRAMES: usize = 8192;
 /// Frames per capture read (~10 ms).
 const READ_FRAMES: usize = 441;
 /// Upper bound for connecting to / querying the server.
 const SERVER_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn map_err(e: PAErr, device: Option<&str>) -> AudioError {
-    match Code::try_from(e).ok() {
+    // libpulse returns negative codes, but the simple API reports `pa_simple_*`'s
+    // positive out-parameter unchanged; `Code::try_from` expects the negative form.
+    match Code::try_from(PAErr(-e.0.saturating_abs())).ok() {
         Some(Code::ConnectionRefused | Code::ConnectionTerminated) => AudioError::NoServer,
         Some(Code::Access | Code::AuthKey) => {
             AudioError::PermissionDenied("the sound server refused access".into())
@@ -202,152 +200,42 @@ fn open_source(name: &str) -> Result<Box<dyn AudioSource>, AudioError> {
         minreq: u32::MAX,
         fragsize: (READ_FRAMES * 8) as u32,
     };
-    let simple = Simple::new(
-        None,
-        "milkdrop",
-        Direction::Record,
-        Some(name),
-        "visualizer capture",
-        &spec,
-        None,
-        Some(&attr),
+    let device = name.to_string();
+    spawn_capture(
+        "md-audio-pulse",
+        OPEN_TIMEOUT,
+        move |_| {
+            Simple::new(
+                None,
+                "milkdrop",
+                Direction::Record,
+                Some(&device),
+                "visualizer capture",
+                &spec,
+                None,
+                Some(&attr),
+            )
+            .map_err(|e| map_err(e, Some(&device)))
+        },
+        capture_loop,
     )
-    .map_err(|e| map_err(e, Some(name)))?;
-    Ok(Box::new(PulseSource::start(simple)))
 }
 
-struct Ring {
-    /// Interleaved stereo samples, newest at the back, at most `RING_FRAMES` frames.
-    samples: VecDeque<f32>,
-    fresh: bool,
-    stop: bool,
-    failed: bool,
-}
-
-struct Shared {
-    ring: Mutex<Ring>,
-    cv: Condvar,
-}
-
-/// Capture source backed by a PulseAudio record stream.
-struct PulseSource {
-    shared: Arc<Shared>,
-    thread: Option<JoinHandle<()>>,
-}
-
-impl PulseSource {
-    fn start(simple: Simple) -> Self {
-        let shared = Arc::new(Shared {
-            ring: Mutex::new(Ring {
-                samples: VecDeque::with_capacity(RING_FRAMES * 2),
-                fresh: false,
-                stop: false,
-                failed: false,
-            }),
-            cv: Condvar::new(),
-        });
-        let s = Arc::clone(&shared);
-        let thread = std::thread::Builder::new()
-            .name("md-audio-pulse".into())
-            .spawn(move || capture_loop(simple, &s))
-            .expect("spawn pulse capture thread");
-        Self {
-            shared,
-            thread: Some(thread),
-        }
-    }
-}
-
-fn capture_loop(simple: Simple, shared: &Shared) {
+/// Reads the record stream into the ring until the source is dropped. `Simple::read`
+/// has no timeout, so after a drop this thread exits (and frees the stream) when the
+/// pending read returns or fails; nothing ever joins it.
+fn capture_loop(simple: Simple, ring: &CaptureRing) {
     let mut bytes = vec![0u8; READ_FRAMES * 8];
-    loop {
-        if shared.ring.lock().map_or(true, |r| r.stop) {
-            return;
-        }
-        let res = simple.read(&mut bytes);
-        let Ok(mut ring) = shared.ring.lock() else {
-            return;
-        };
-        if ring.stop {
-            return;
-        }
-        if let Err(e) = res {
-            eprintln!("md-audio: PulseAudio capture failed: {e}");
-            ring.failed = true;
-            shared.cv.notify_all();
-            return;
-        }
-        for c in bytes.chunks_exact(4) {
-            ring.samples
-                .push_back(f32::from_le_bytes([c[0], c[1], c[2], c[3]]));
-        }
-        let cap = RING_FRAMES * 2;
-        let excess = ring.samples.len().saturating_sub(cap);
-        ring.samples.drain(..excess);
-        ring.fresh = true;
-        shared.cv.notify_all();
-    }
-}
-
-impl AudioSource for PulseSource {
-    fn next_frame(
-        &mut self,
-        left: &mut [u8; 576],
-        right: &mut [u8; 576],
-        timeout: Duration,
-    ) -> FrameStatus {
-        let now = Instant::now();
-        let deadline = now
-            .checked_add(timeout)
-            .unwrap_or_else(|| now + Duration::from_secs(86_400 * 365));
-        let Ok(mut ring) = self.shared.ring.lock() else {
-            left.fill(0);
-            right.fill(0);
-            return FrameStatus::Ended;
-        };
-        loop {
-            if ring.fresh {
-                ring.fresh = false;
-                let skip = ring.samples.len().saturating_sub(576 * 2);
-                let tail: Vec<f32> = ring.samples.iter().skip(skip).copied().collect();
-                drop(ring);
-                to_frame(&tail, CHANNELS, RATE, left, right);
-                return FrameStatus::Data;
+    while !ring.is_stopped() {
+        if let Err(e) = simple.read(&mut bytes) {
+            if !ring.is_stopped() {
+                eprintln!("md-audio: PulseAudio capture failed: {e}");
+                ring.fail();
             }
-            if ring.failed {
-                left.fill(0);
-                right.fill(0);
-                return FrameStatus::Ended;
-            }
-            let now = Instant::now();
-            if now >= deadline {
-                left.fill(0);
-                right.fill(0);
-                return FrameStatus::Silence;
-            }
-            ring = match self.shared.cv.wait_timeout(ring, deadline - now) {
-                Ok(g) => g.0,
-                Err(_) => {
-                    left.fill(0);
-                    right.fill(0);
-                    return FrameStatus::Ended;
-                }
-            };
+            return;
         }
-    }
-}
-
-impl Drop for PulseSource {
-    /// Signals the capture thread and detaches it instead of joining: `Simple::read` has
-    /// no timeout, so a stalled server would otherwise hang the join (and, via
-    /// `TimeoutSource::drop`, application shutdown). The thread owns the `Simple` and an
-    /// `Arc` of the shared state, so detaching is sound; it exits and frees the stream
-    /// when the read returns or fails, and the process reaps it at exit.
-    fn drop(&mut self) {
-        if let Ok(mut r) = self.shared.ring.lock() {
-            r.stop = true;
+        if !ring.push(&decode_f32_le(&bytes, CHANNELS, false), CHANNELS, RATE) {
+            return;
         }
-        self.shared.cv.notify_all();
-        drop(self.thread.take());
     }
 }

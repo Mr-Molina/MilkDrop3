@@ -1,7 +1,7 @@
-//! Prints the available loopback (monitor) capture devices.
+//! Prints the available loopback capture devices (`name`, then description).
 fn main() {
     match md_audio::list_devices() {
-        Ok(devices) if devices.is_empty() => println!("no monitor sources found"),
+        Ok(devices) if devices.is_empty() => println!("no loopback capture devices found"),
         Ok(devices) => {
             for d in devices {
                 let mark = if d.is_default { " (default)" } else { "" };
