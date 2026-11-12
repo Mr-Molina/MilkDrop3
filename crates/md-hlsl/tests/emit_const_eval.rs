@@ -143,3 +143,15 @@ fn intrinsic_calls_with_a_runtime_argument_stay_inline() {
     );
     has(&w, &["mix(h__uv.x, 1.0, 0.5)", "pow(h__rad_ang.x, 2.0)"]);
 }
+
+/// Found by Task 4.10's typed soup: `(2 ? 0.5 : 40)` emitted
+/// `select(40.0, 0.5, true)`, an AbstractFloat `select` naga leaves
+/// unconcretized; all-constant operands now go through `var`s too.
+#[test]
+fn all_constant_ternary_validates() {
+    let w = emit_ok("", "_return_value = floor(lerp((2 ? 0.5 : 40), 0.5, 0.5));");
+    has(&w, &["select(md_t2, md_t1, md_t0)"]);
+    emit_ok("", "_return_value = (true ? float2(1, 2) : 3).xyxy;");
+    let w = emit_ok("", "_return_value = _c0.x > 0 ? 0.5 : 40;");
+    has(&w, &["select(40.0, 0.5, (U._c0.x > 0.0))"]);
+}

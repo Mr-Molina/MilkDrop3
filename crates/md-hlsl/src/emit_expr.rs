@@ -319,11 +319,35 @@ impl Fx<'_, '_> {
         Ok(format!("({a} {sym} {b})"))
     }
 
+    /// When every operand in `es` is constant, move the emitted operands
+    /// `v` into `var`s: naga would otherwise const-evaluate the operation
+    /// built from them (an error on overflow or a domain error,
+    /// `exp2(1e30)`, `pow(-1, 0.5)`) or, for builtins it cannot fold, leave
+    /// it AbstractFloat and reject it (`mix(2.0, 1.0, 0.5)`,
+    /// `select(40.0, 0.5, true)`). At run time the result is IEEE inf/NaN,
+    /// as the SM2/3 hardware gave.
+    pub fn spill_constants(&mut self, es: &[&TExpr], v: &mut [String]) -> R<()> {
+        if !es
+            .iter()
+            .all(|e| crate::emit::naga_const(e, &self.cx.consts))
+        {
+            return Ok(());
+        }
+        for (s, e) in v.iter_mut().zip(es) {
+            let t = self.fresh();
+            let ty = wgsl_ty(&e.ty, e.pos)?;
+            self.pre.push(format!("var {t}: {ty} = {s};"));
+            *s = t;
+        }
+        Ok(())
+    }
+
     #[inline(never)]
     fn ternary(&mut self, e: &TExpr, cond: &TExpr, then: &TExpr, els: &TExpr) -> R<String> {
         let selectable = matches!(e.ty.shape(), Some(Shape::Scalar | Shape::Vec(_)));
         if selectable && !has_effects(then) && !has_effects(els) {
-            let v = self.operands(&[cond, then, els])?;
+            let mut v = self.operands(&[cond, then, els])?;
+            self.spill_constants(&[cond, then, els], &mut v)?;
             return Ok(format!("select({}, {}, {})", v[2], v[1], v[0]));
         }
         if !cond.ty.is_scalar() {

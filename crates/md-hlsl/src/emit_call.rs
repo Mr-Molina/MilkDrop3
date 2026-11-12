@@ -191,22 +191,7 @@ impl Fx<'_, '_> {
         }
         let refs: Vec<&TExpr> = args.iter().collect();
         let mut v = self.operands(&refs)?;
-        if args
-            .iter()
-            .all(|a| crate::emit::naga_const(a, &self.cx.consts))
-        {
-            // All-constant arguments: naga would const-evaluate the call
-            // (an error on overflow or a domain error, `exp2(1e30)`,
-            // `pow(-1, 0.5)`) or leave it AbstractFloat when it cannot
-            // (`mix(2.0, 1.0, 0.5)`, rejected by the validator). Through
-            // `var`s it runs at run time, giving IEEE inf/NaN as SM2/3 did.
-            for (s, a) in v.iter_mut().zip(args) {
-                let t = self.fresh();
-                let ty = crate::emit::wgsl_ty(&a.ty, a.pos)?;
-                self.pre.push(format!("var {t}: {ty} = {s};"));
-                *s = t;
-            }
-        }
+        self.spill_constants(&refs, &mut v)?;
         let a = |k: usize| v[k].as_str();
         Ok(match i {
             I::Mul => match (args[0].ty.shape(), args[1].ty.shape()) {
