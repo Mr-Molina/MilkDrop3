@@ -37,6 +37,9 @@
 //! A texture coordinate used twice (`c.xy`, `c.w`) is captured in a
 //! temporary unless it is a plain variable.
 //!
+//! An intrinsic call whose arguments are all constants gets them through
+//! `var`s, so naga neither const-evaluates it nor leaves it AbstractFloat.
+//!
 //! `round` keeps WGSL's round-half-to-even (Task 4.9 decision). HLSL
 //! documents half away from zero; SM2/3 has no rounding instruction, so
 //! fxc expanded `round` (possibly to `floor(x + 0.5)`, which differs from
@@ -187,7 +190,23 @@ impl Fx<'_, '_> {
             _ => {}
         }
         let refs: Vec<&TExpr> = args.iter().collect();
-        let v = self.operands(&refs)?;
+        let mut v = self.operands(&refs)?;
+        if args
+            .iter()
+            .all(|a| crate::emit::naga_const(a, &self.cx.consts))
+        {
+            // All-constant arguments: naga would const-evaluate the call
+            // (an error on overflow or a domain error, `exp2(1e30)`,
+            // `pow(-1, 0.5)`) or leave it AbstractFloat when it cannot
+            // (`mix(2.0, 1.0, 0.5)`, rejected by the validator). Through
+            // `var`s it runs at run time, giving IEEE inf/NaN as SM2/3 did.
+            for (s, a) in v.iter_mut().zip(args) {
+                let t = self.fresh();
+                let ty = crate::emit::wgsl_ty(&a.ty, a.pos)?;
+                self.pre.push(format!("var {t}: {ty} = {s};"));
+                *s = t;
+            }
+        }
         let a = |k: usize| v[k].as_str();
         Ok(match i {
             I::Mul => match (args[0].ty.shape(), args[1].ty.shape()) {
