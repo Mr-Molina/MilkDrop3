@@ -25,13 +25,21 @@
 //! F37), blend patterns ([`randomize_blend_pattern`]), `ApplyShaderParams`
 //! ([`shader_uniforms`], shared with the composite pass) and
 //! [`Renderer::warp_pass`].
+//!
+//! Task 5.7: the frame loop ([`Renderer::begin_frame`] with a
+//! [`FrameInput`], [`Renderer::present`] into any target), the composite
+//! pass ([`comp_grid`], the preset composite shaders) and its no-shader
+//! path ([`fixed_comp_draws`]), and [`Renderer::resize`] (clamped, F56).
 #![forbid(unsafe_code)]
 
 mod blend;
 mod blendpattern;
 mod bytes;
+mod comp;
+mod comp_fixed;
 mod dynbuf;
 mod fixed;
+mod frame;
 mod frame_vars;
 mod gpu;
 mod image_load;
@@ -45,6 +53,7 @@ mod readback;
 mod renderer;
 mod shader_cache;
 mod shader_params;
+mod tex_size;
 mod texcache;
 mod texture;
 mod textures;
@@ -54,8 +63,14 @@ mod warp;
 
 pub use blend::BlendMode;
 pub use blendpattern::{blend_pattern, frand, gen_plasma, randomize_blend_pattern, BlendPattern};
+pub use comp::{
+    comp_grid, comp_vertices, cosine_interp, cull_indices, hue_shades, plan_comp_passes, CompGrid,
+    CompPass, COMP_GRID_X, COMP_GRID_Y,
+};
+pub use comp_fixed::{fixed_comp_draws, rgba_01, EchoBlend, FixedCompDraw, FixedCompParams};
 pub use dynbuf::DynamicVertexBuffer;
 pub use fixed::{fan_to_list, points_to_quads, FixedMode, SamplerKind, Topo};
+pub use frame::{FrameCtx, FrameInput};
 pub use frame_vars::PerFrameVars;
 pub use gpu::{gpu_or_skip, headless_device, headless_gpu, Gpu};
 pub use image_load::{load_image, ImageError};
@@ -68,8 +83,8 @@ pub use preset_bind::{sampler_kind, SlotSource};
 pub use preset_gpu::{PresetGpu, ShaderProgram};
 pub use readback::{map_read, read_texture_level};
 pub use renderer::{
-    blur_texture_sizes, hlsl_ps_version, RenderError, RenderSettings, Renderer, DEFAULT_COMP_PS,
-    DEFAULT_WARP_PS, INCLUDE_FX,
+    hlsl_ps_version, RenderError, RenderSettings, Renderer, DEFAULT_COMP_PS, DEFAULT_WARP_PS,
+    INCLUDE_FX,
 };
 pub use shader_cache::{
     decode as decode_cache_entry, encode as encode_cache_entry, shader_key, CachedShader,
@@ -79,6 +94,7 @@ pub use shader_params::{
     random_rot_matrix, randomize_preset_vars, safe_blur_min_max, shader_uniforms,
     FrameShaderInputs, PresetShaderInputs, RotParams,
 };
+pub use tex_size::{blur_texture_sizes, main_texture_size, TexSize};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
 pub use textures::{
@@ -93,4 +109,5 @@ pub use warp::{
 };
 
 pub use image::RgbaImage;
+pub use md_analysis::SoundData;
 pub use wgpu;

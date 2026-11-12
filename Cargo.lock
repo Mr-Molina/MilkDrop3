@@ -851,6 +851,7 @@ version = "0.1.0"
 dependencies = [
  "ddsfile",
  "image",
+ "md-analysis",
  "md-hlsl",
  "md-preset",
  "md-testkit",

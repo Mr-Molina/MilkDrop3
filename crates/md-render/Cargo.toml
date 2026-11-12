@@ -12,6 +12,7 @@ workspace = true
 wgpu.workspace = true
 md-hlsl = { path = "../md-hlsl" }
 md-preset = { path = "../md-preset" }
+md-analysis = { path = "../md-analysis" }
 image.workspace = true
 ddsfile.workspace = true
 rand_pcg.workspace = true

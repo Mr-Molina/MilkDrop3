@@ -1,7 +1,14 @@
 //! The [`Renderer`] (A.3; created here in Task 5.5 per F36 — Task 5.7 adds
-//! `begin_frame`, `present`, `resize` and the composite pass): the
-//! ping-pong main textures, the blur textures, the [`TextureStore`], the
-//! fixed-function [`PipelineCache`], the [`ShaderCache`] and preset loading.
+//! `begin_frame`, `present` ([`crate::frame`]), `resize` and the composite
+//! pass ([`crate::comp`])): the ping-pong main textures, the blur textures,
+//! the warp mesh, the [`TextureStore`], the fixed-function
+//! [`PipelineCache`], the [`ShaderCache`] and preset loading.
+//!
+//! Sizes (F56, Review Focus #5): the window is clamped to
+//! `1..=max_texture_dimension_2d` in [`Renderer::new`] and
+//! [`Renderer::resize`]; the main texture size follows
+//! [`main_texture_size`] (`AllocateMyDX9Stuff`, plugin.cpp:1844-1889@6f7cd5d)
+//! and is clamped the same way, so no size ever panics.
 //!
 //! Preset shader compilation (F44): [`Renderer::load_preset`] compiles both
 //! the warp and the composite shader in one call. md-core's preset switcher
@@ -9,11 +16,17 @@
 //! for `Renderer` there and faked in its tests, and calls it at tick 2 of
 //! its 8-tick schedule.
 
+use crate::comp::{comp_grid, CompGrid};
+use crate::dynbuf::DynamicVertexBuffer;
 use crate::gpu::Gpu;
+use crate::mesh::{mesh_aspect, WarpMesh};
+use crate::noise::crand;
 use crate::pipelines::PipelineCache;
 use crate::preset_bind::Resolver;
 use crate::preset_gpu::{PresetGpu, PresetLayouts, ProgramSpec, ProgramTargets, ShaderProgram};
 use crate::shader_cache::ShaderCache;
+use crate::tex_size::TexSize;
+use crate::tex_size::{blur_texture_sizes, main_texture_size, main_textures};
 use crate::texture::{Texture2d, Texture3d};
 use crate::textures::TextureStore;
 use crate::warp::WarpBuffers;
@@ -30,12 +43,19 @@ pub const DEFAULT_WARP_PS: &str = include_str!("../../../assets/hlsl/warp_ps.fx"
 /// The default composite shader body (`data/comp_ps.fx`, F20): the fallback.
 pub const DEFAULT_COMP_PS: &str = include_str!("../../../assets/hlsl/comp_ps.fx");
 
-/// Renderer configuration (A.3, plus `shader_cache_dir` per F35).
+/// Renderer configuration (A.3, plus `shader_cache_dir` per F35 and the
+/// texture sizing options of Task 5.7).
 #[derive(Clone, Debug, PartialEq)]
 pub struct RenderSettings {
-    /// Main (ping-pong) texture size, clamped to `1..=max_texture_dimension_2d`.
+    /// The initial window size; with [`TexSize::Fixed`] also the main
+    /// (ping-pong) texture size. Clamped to `1..=max_texture_dimension_2d`.
     pub tex_w: u32,
     pub tex_h: u32,
+    /// How the main texture size follows the window.
+    pub tex_size: TexSize,
+    /// `m_nCanvasStretch` in percent (0 = auto = 100: the C++'s slow-GPU
+    /// grey list is not ported).
+    pub canvas_stretch: u32,
     /// Warp mesh size (C++ default 64 × 64).
     pub grid_x: u32,
     pub grid_y: u32,
@@ -53,12 +73,15 @@ pub struct RenderSettings {
 }
 
 impl RenderSettings {
-    /// Settings for a `tex_w`×`tex_h` main texture and C++ defaults
-    /// otherwise (grid 64×64, ps_3_0, 8 bits, no disk cache).
+    /// Settings for a `tex_w`×`tex_h` window and C++ defaults otherwise
+    /// (auto texture size, no canvas stretch, grid 64×64, ps_3_0, 8 bits,
+    /// no disk cache).
     pub fn new(tex_w: u32, tex_h: u32) -> RenderSettings {
         RenderSettings {
             tex_w,
             tex_h,
+            tex_size: TexSize::Auto,
+            canvas_stretch: 100,
             grid_x: 64,
             grid_y: 64,
             max_ps: PsVersion::Ps3_0,
@@ -110,25 +133,6 @@ pub fn hlsl_ps_version(v: md_preset::PsVersion) -> PsVersion {
     }
 }
 
-/// Sizes of the six blur textures for a `w`×`h` main texture, exactly as
-/// `AllocateMyDX9Stuff` (plugin.cpp:1987-2007@6f7cd5d): levels 0, 1 halve, then
-/// every even level halves again (each at least 16), widths rounded to
-/// `((w + 3) / 16) * 16`, heights to `((h + 3) / 4) * 4`. Textures 1, 3, 5
-/// are what presets see as `blur1..3` (¼, ⅛, 1/16 of the main texture —
-/// the Milestone 5 text's "½, ¼, ⅛" names textures 0, 2, 4).
-pub fn blur_texture_sizes(w: u32, h: u32) -> [(u32, u32); 6] {
-    let (mut w, mut h) = (w, h);
-    let mut out = [(0, 0); 6];
-    for (i, o) in out.iter_mut().enumerate() {
-        if i % 2 == 0 || i < 2 {
-            w = (w / 2).max(16);
-            h = (h / 2).max(16);
-        }
-        *o = (((w + 3) / 16) * 16, h.div_ceil(4) * 4);
-    }
-    out
-}
-
 /// The MilkDrop renderer.
 pub struct Renderer {
     pub(crate) gpu: Gpu,
@@ -137,13 +141,28 @@ pub struct Renderer {
     /// Index of the ping-pong texture the warp pass draws into this frame
     /// (the C++'s `m_lpVS[1]`); the other one is its source (`m_lpVS[0]`).
     pub(crate) vs_target: usize,
-    blur: Vec<Texture2d>,
+    pub(crate) blur: Vec<Texture2d>,
     textures: TextureStore,
     pub(crate) pipelines: PipelineCache,
     shaders: ShaderCache,
     layouts: PresetLayouts,
     pub(crate) rng: rand_pcg::Pcg32,
     pub(crate) warp_buffers: Option<WarpBuffers>,
+    /// The window (composite target) size, `GetWidth()` × `GetHeight()`.
+    pub(crate) window: (u32, u32),
+    /// Bumped whenever the main/blur textures are replaced; preset
+    /// programs bound to an older generation are rebound before drawing.
+    pub(crate) generation: u64,
+    pub(crate) mesh: WarpMesh,
+    /// `m_nFramesSinceResize`: 0 clears the warp source on the next frame.
+    pub(crate) frames_since_resize: u32,
+    /// `m_fRandStart[4]` (plugin.cpp:6623-6626), for the hue shader.
+    pub(crate) rand_start: [f32; 4],
+    /// The composite's intermediate target (main format, window size).
+    pub(crate) comp_tex: Texture2d,
+    pub(crate) comp_grid: CompGrid,
+    pub(crate) comp_buffers: Option<WarpBuffers>,
+    pub(crate) dynbuf: DynamicVertexBuffer,
     last_errors: Vec<RenderError>,
     warned_textures: HashSet<String>,
     fallback_2d: Texture2d,
@@ -161,23 +180,38 @@ impl Renderer {
     ) -> Result<Renderer, RenderError> {
         let gpu = Gpu::new(device, queue);
         let max = device.limits().max_texture_dimension_2d.max(1);
-        settings.tex_w = settings.tex_w.clamp(1, max);
-        settings.tex_h = settings.tex_h.clamp(1, max);
+        let window = (settings.tex_w.clamp(1, max), settings.tex_h.clamp(1, max));
+        let (w, h) = main_texture_size(
+            window,
+            settings.tex_size,
+            window,
+            settings.canvas_stretch,
+            max,
+        );
+        (settings.tex_w, settings.tex_h) = (w, h);
         let format = settings.format();
-        let (w, h) = (settings.tex_w, settings.tex_h);
-        let vs = [0, 1].map(|_| Texture2d::new_target(&gpu, w, h, format, true));
-        let blur = blur_texture_sizes(w, h)
-            .iter()
-            .map(|&(bw, bh)| Texture2d::new_target(&gpu, bw.min(max), bh.min(max), format, false))
-            .collect();
+        let (vs, blur) = main_textures(&gpu, w, h, format);
+        let mut rng = rand_pcg::Pcg32::seed_from_u64(seed ^ 0x6d64_7261_6e64_7478);
+        // plugin.cpp:6623-6626: `(rand() % N) * 0.01`.
+        let rand_start = [64841, 53751, 42661, 31571].map(|n| (crand(&mut rng) % n) as f32 * 0.01);
+        let (ax, ay) = mesh_aspect(w, h);
         // Unbound D3D9 stages sample opaque black (ledger Task 5.5 ruling).
         let black = [0, 0, 0, 255u8];
         Ok(Renderer {
+            window,
+            generation: 0,
+            mesh: WarpMesh::new(settings.grid_x, settings.grid_y, ax, ay),
+            frames_since_resize: 0,
+            rand_start,
+            comp_tex: Texture2d::new_target(&gpu, window.0, window.1, format, false),
+            comp_grid: comp_grid(window, (w, h)),
+            comp_buffers: None,
+            dynbuf: DynamicVertexBuffer::new(&gpu, 1024),
             textures: TextureStore::new(&gpu, seed),
             pipelines: PipelineCache::new(),
             shaders: ShaderCache::new(settings.shader_cache_dir.clone()),
             layouts: PresetLayouts::new(device),
-            rng: rand_pcg::Pcg32::seed_from_u64(seed ^ 0x6d64_7261_6e64_7478),
+            rng,
             last_errors: Vec::new(),
             warned_textures: HashSet::new(),
             fallback_2d: Texture2d::from_rgba8(&gpu, 1, 1, &black, false),
@@ -195,9 +229,93 @@ impl Renderer {
         &self.gpu
     }
 
-    /// The settings in effect (texture size clamped).
+    /// The settings in effect (`tex_w`/`tex_h` hold the main texture size
+    /// actually allocated).
     pub fn settings(&self) -> &RenderSettings {
         &self.settings
+    }
+
+    /// The window (composite target) size after clamping.
+    pub fn window(&self) -> (u32, u32) {
+        self.window
+    }
+
+    /// The warp mesh (grid from the settings, aspect from the main texture
+    /// size). md-core computes its UVs every frame through
+    /// [`Renderer::mesh_mut`] ([`WarpMesh::compute_uvs`]: the current
+    /// preset, then the old one with the blend pattern while blending)
+    /// before [`Renderer::begin_frame`]; the warp pass draws it and the
+    /// composite reads its blend alphas. A resize that changes the texture
+    /// size replaces it (identity UVs).
+    pub fn mesh(&self) -> &WarpMesh {
+        &self.mesh
+    }
+
+    pub fn mesh_mut(&mut self) -> &mut WarpMesh {
+        &mut self.mesh
+    }
+
+    /// `m_fRandStart` (the hue shader's random phases).
+    pub fn rand_start(&self) -> [f32; 4] {
+        self.rand_start
+    }
+
+    /// The composite's intermediate texture (main format, window size):
+    /// after [`Renderer::present`] it holds the frame copied to the target.
+    pub fn comp_texture(&self) -> &Texture2d {
+        &self.comp_tex
+    }
+
+    /// Clear the warp source at the start of the next frame, as after a
+    /// resize (`m_nFramesSinceResize = 0`).
+    pub fn request_clear(&mut self) {
+        self.frames_since_resize = 0;
+    }
+
+    /// Resize to a `w`×`h` window (`OnResizeGraphicsWindow` →
+    /// `AllocateMyDX9Stuff`). Both are clamped to
+    /// `1..=max_texture_dimension_2d` (F56). The main texture size follows
+    /// [`main_texture_size`]; when it changes the ping-pong, blur textures
+    /// and warp mesh are replaced (preset programs are rebound lazily, see
+    /// [`crate::ShaderProgram`]). The composite grid and target follow the
+    /// window, and the next frame clears the warp source as the C++ does
+    /// after every resize (`m_nFramesSinceResize = 0`).
+    pub fn resize(&mut self, w: u32, h: u32) {
+        let max = self.gpu.device().limits().max_texture_dimension_2d.max(1);
+        let window = (w.clamp(1, max), h.clamp(1, max));
+        let s = &self.settings;
+        let current = (s.tex_w, s.tex_h);
+        let tex = main_texture_size(window, s.tex_size, current, s.canvas_stretch, max);
+        let format = s.format();
+        if tex != current {
+            let (vs, blur) = main_textures(&self.gpu, tex.0, tex.1, format);
+            (self.vs, self.blur) = (vs, blur);
+            (self.settings.tex_w, self.settings.tex_h) = tex;
+            self.generation += 1;
+            let (ax, ay) = mesh_aspect(tex.0, tex.1);
+            self.mesh = WarpMesh::new(self.settings.grid_x, self.settings.grid_y, ax, ay);
+        }
+        if window != self.window || tex != current {
+            self.window = window;
+            self.comp_tex = Texture2d::new_target(&self.gpu, window.0, window.1, format, false);
+            self.comp_grid = comp_grid(window, tex);
+            // Bind groups of the dropped textures.
+            self.pipelines.clear_bind_groups();
+        }
+        self.frames_since_resize = 0;
+    }
+
+    /// Rebind `prog` if it was bound to replaced textures.
+    pub(crate) fn rebind(&mut self, prog: &crate::ShaderProgram) {
+        if prog.generation() == self.generation {
+            return;
+        }
+        let targets = ProgramTargets {
+            vs: &self.vs,
+            blur: &self.blur,
+            generation: self.generation,
+        };
+        prog.rebind(&self.gpu, &mut self.pipelines, &targets);
     }
 
     /// Ping-pong main texture `i` (0 or 1).
@@ -350,6 +468,7 @@ impl Renderer {
         let targets = ProgramTargets {
             vs: &self.vs,
             blur: &self.blur,
+            generation: self.generation,
         };
         self.layouts
             .build(&self.gpu, &mut self.pipelines, spec, &targets)
@@ -359,18 +478,6 @@ impl Renderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn blur_sizes_follow_allocate_my_dx9_stuff() {
-        // The C++ comment's example: main 1024 -> 512, 256, 128, 128, 64, 64.
-        let s = blur_texture_sizes(1024, 1024);
-        assert_eq!(s.map(|(w, _)| w), [512, 256, 128, 128, 64, 64]);
-        assert_eq!(s.map(|(_, h)| h), [512, 256, 128, 128, 64, 64]);
-        // Rounding and the 16 minimum.
-        let s = blur_texture_sizes(100, 30);
-        assert_eq!(s[0], (48, 16)); // w 50 -> 48, h max(16, 15) = 16
-        assert_eq!(s[5], (16, 16));
-    }
 
     #[test]
     fn ps_versions_convert() {

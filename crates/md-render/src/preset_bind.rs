@@ -64,7 +64,7 @@ pub fn sampler_kind(b: &SamplerBinding) -> SamplerKind {
 }
 
 /// The blur level of a `blurN` root (C++ spelling, case-sensitive).
-fn blur_level(root: &str) -> Option<u8> {
+pub(crate) fn blur_level(root: &str) -> Option<u8> {
     match root {
         "blur1" => Some(1),
         "blur2" => Some(2),

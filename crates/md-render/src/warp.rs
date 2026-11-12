@@ -80,7 +80,7 @@ pub enum Cull {
 }
 
 impl Cull {
-    fn keeps(self, a: [u8; 3]) -> bool {
+    pub(crate) fn keeps(self, a: [u8; 3]) -> bool {
         match self {
             Cull::None => true,
             Cull::Visible => (a[0] | a[1] | a[2]) > 0,
@@ -204,11 +204,12 @@ pub fn decay_byte(decay: f32) -> u8 {
     ((decay * 255.0) as i32 & 0xff) as u8
 }
 
-/// The warp pass's vertex and index buffers, grown on demand.
+/// The warp pass's (and the composite grid's) vertex and index buffers,
+/// grown on demand.
 #[derive(Debug)]
 pub(crate) struct WarpBuffers {
-    vbuf: wgpu::Buffer,
-    ibuf: wgpu::Buffer,
+    pub(crate) vbuf: wgpu::Buffer,
+    pub(crate) ibuf: wgpu::Buffer,
 }
 
 fn buffer(gpu: &Gpu, size: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
@@ -223,8 +224,18 @@ fn buffer(gpu: &Gpu, size: u64, usage: wgpu::BufferUsages) -> wgpu::Buffer {
 impl WarpBuffers {
     /// Upload `g`, replacing a buffer that is too small.
     fn upload(slot: &mut Option<WarpBuffers>, gpu: &Gpu, g: &WarpGeometry) {
-        let v = vertices_to_bytes(&g.vertices);
-        let i: Vec<u8> = g.indices.iter().flat_map(|x| x.to_le_bytes()).collect();
+        WarpBuffers::upload_raw(slot, gpu, &g.vertices, &g.indices);
+    }
+
+    /// Upload `vertices` and `indices`, replacing a buffer that is too small.
+    pub(crate) fn upload_raw(
+        slot: &mut Option<WarpBuffers>,
+        gpu: &Gpu,
+        vertices: &[Vertex],
+        indices: &[u32],
+    ) {
+        let v = vertices_to_bytes(vertices);
+        let i: Vec<u8> = indices.iter().flat_map(|x| x.to_le_bytes()).collect();
         let b = slot.get_or_insert_with(|| WarpBuffers {
             vbuf: buffer(gpu, v.len() as u64, wgpu::BufferUsages::VERTEX),
             ibuf: buffer(gpu, i.len() as u64, wgpu::BufferUsages::INDEX),

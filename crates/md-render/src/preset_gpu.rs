@@ -21,6 +21,16 @@
 //! `main` binds one of the two ping-pong textures, so group 1 exists twice:
 //! [`ShaderProgram::bind`] takes the index of the texture to read — when
 //! drawing into `VS[t]` that is [`crate::Renderer::other_vs`]`(t)`.
+//!
+//! Resize (Task 5.7, ledger Task 5.5 note): [`crate::Renderer::resize`]
+//! replaces the main and blur textures, so group 1 must be rebuilt (the
+//! slot sources are kept). [`PresetGpu`]s belong to the caller, so the
+//! renderer cannot reach them at resize time; instead every program
+//! remembers the renderer's texture generation it was bound for, and the
+//! frame loop rebinds a stale program before drawing it (group 1 lives
+//! behind a `Mutex` so this works through the `&PresetGpu` in
+//! [`crate::FrameInput`]). Rebinding also rewrites the `texsize_blurN`
+//! values and the warp program's `VsParams`.
 
 use crate::blend::BlendMode;
 use crate::gpu::{block_on, Gpu};
@@ -32,7 +42,7 @@ use crate::uniforms::{texsizes_bytes, MdUniforms, VsParams};
 use crate::vertex::Vertex;
 use md_hlsl::layout::{BUILTIN_VS_PARAMS_BINDING, BUILTIN_VS_PARAMS_SIZE};
 use md_hlsl::{SamplerBinding, ShaderKind, TranslateError};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use wgpu::util::DeviceExt;
 
 /// The compiled warp and composite shaders of one preset; `None` where the
@@ -69,8 +79,10 @@ pub struct ShaderProgram {
     pub flip_pipeline: wgpu::RenderPipeline,
     /// `U`, `T` and `VsParams`.
     pub bind_group_0: wgpu::BindGroup,
-    /// Textures and samplers, with `main` bound to ping-pong texture 0 or 1.
-    pub bind_group_1: [wgpu::BindGroup; 2],
+    /// Textures and samplers, with `main` bound to ping-pong texture 0 or 1
+    /// (see [`ShaderProgram::bind_group_1`]).
+    group1: Mutex<Group1>,
+    bgl1: wgpu::BindGroupLayout,
     /// The `MdUniforms` buffer (write with [`ShaderProgram::write_uniforms`]).
     pub uniforms: wgpu::Buffer,
     /// The `VsParams` buffer, initially for the main texture size.
@@ -79,7 +91,8 @@ pub struct ShaderProgram {
     pub texsizes: wgpu::Buffer,
     /// Full `texsize_*` names, in `TexSizes` order.
     pub texsize_names: Vec<String>,
-    /// `(w, h, 1/w, 1/h)` per `texsize_names` entry (zero when unresolved).
+    /// `(w, h, 1/w, 1/h)` per `texsize_names` entry (zero when unresolved),
+    /// as resolved at load time (a resize rewrites the buffer's blur sizes).
     pub texsize_values: Vec<[f32; 4]>,
     /// Bound samplers in slot order.
     pub samplers: Vec<SamplerBinding>,
@@ -89,6 +102,13 @@ pub struct ShaderProgram {
     pub highest_blur: u8,
     fallback: bool,
     shader: Arc<CachedShader>,
+}
+
+/// Group 1 of a program and the renderer texture generation it binds.
+#[derive(Debug)]
+struct Group1 {
+    generation: u64,
+    groups: [wgpu::BindGroup; 2],
 }
 
 impl ShaderProgram {
@@ -113,20 +133,80 @@ impl ShaderProgram {
         }
     }
 
+    /// Group 1 with `sampler_main` reading ping-pong texture `main` (0 or
+    /// 1), `None` for another index.
+    pub fn bind_group_1(&self, main: usize) -> Option<wgpu::BindGroup> {
+        let g = self.group1.lock().unwrap_or_else(PoisonError::into_inner);
+        g.groups.get(main).cloned()
+    }
+
+    /// The renderer texture generation group 1 binds.
+    pub(crate) fn generation(&self) -> u64 {
+        self.group1
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .generation
+    }
+
     /// Set the pipeline for `blend` and both bind groups on `pass`, with
     /// `sampler_main` reading ping-pong texture `main` (0 or 1). `false`
     /// (nothing set) for another blend mode or index. The caller sets the
     /// vertex buffer and draws.
     pub fn bind(&self, pass: &mut wgpu::RenderPass<'_>, main: usize, blend: BlendMode) -> bool {
-        let (Some(pipeline), Some(group1)) =
-            (self.pipeline_for(blend), self.bind_group_1.get(main))
+        let (Some(pipeline), Some(group1)) = (self.pipeline_for(blend), self.bind_group_1(main))
         else {
             return false;
         };
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &self.bind_group_0, &[]);
-        pass.set_bind_group(1, group1, &[]);
+        pass.set_bind_group(1, &group1, &[]);
         true
+    }
+
+    /// Rebuild group 1 for the renderer's current textures
+    /// (`targets.generation`) if it binds older ones, keeping the slot sources; rewrite the
+    /// `texsize_blurN` values for the new blur sizes and, for a warp
+    /// program, `VsParams` for the new main texture size.
+    pub(crate) fn rebind(&self, gpu: &Gpu, cache: &mut PipelineCache, targets: &ProgramTargets) {
+        let generation = targets.generation;
+        let mut g = self.group1.lock().unwrap_or_else(PoisonError::into_inner);
+        if g.generation == generation {
+            return;
+        }
+        g.groups = [0, 1].map(|m| {
+            group1(
+                gpu,
+                cache,
+                &self.bgl1,
+                &self.samplers,
+                &self.sources,
+                targets,
+                m,
+            )
+        });
+        g.generation = generation;
+        let values: Vec<[f32; 4]> = self
+            .texsize_names
+            .iter()
+            .zip(&self.texsize_values)
+            .map(|(name, v)| {
+                let root = md_hlsl::texsize_root(name).unwrap_or(name);
+                match crate::preset_bind::blur_level(root) {
+                    Some(l) => {
+                        let t = &targets.blur[usize::from(l) * 2 - 1];
+                        let (w, h) = (t.w as f32, t.h as f32);
+                        [w, h, 1.0 / w, 1.0 / h]
+                    }
+                    None => *v,
+                }
+            })
+            .collect();
+        gpu.queue()
+            .write_buffer(&self.texsizes, 0, &texsizes_bytes(&values));
+        if self.kind == ShaderKind::Warp {
+            let [w, h] = [targets.vs[0].w, targets.vs[0].h];
+            self.write_vs_params(gpu, VsParams::for_target(w, h));
+        }
     }
 
     /// Upload this frame's `MdUniforms`.
@@ -205,6 +285,8 @@ impl PresetLayouts {
 pub(crate) struct ProgramTargets<'a> {
     pub vs: &'a [Texture2d; 2],
     pub blur: &'a [Texture2d],
+    /// The renderer's texture generation (bumped when they are replaced).
+    pub generation: u64,
 }
 
 /// One compiled shader plus its resolved slots, before GPU objects exist.
@@ -257,14 +339,14 @@ fn group1(
     gpu: &Gpu,
     cache: &mut PipelineCache,
     layout: &wgpu::BindGroupLayout,
-    spec: &ProgramSpec,
+    samplers: &[SamplerBinding],
+    sources: &[SlotSource],
     targets: &ProgramTargets,
     main: usize,
 ) -> wgpu::BindGroup {
-    let samplers = &spec.shader.translated.samplers;
     let parts: Vec<(wgpu::TextureView, wgpu::Sampler)> = samplers
         .iter()
-        .zip(&spec.sources)
+        .zip(sources)
         .map(|(b, src)| {
             let view = match src {
                 SlotSource::Main => targets.vs[main].view.clone(),
@@ -349,7 +431,8 @@ impl PresetLayouts {
             ],
         });
         let bgl1 = group1_layout(device, &t.samplers);
-        let bind_group_1 = [0, 1].map(|m| group1(gpu, cache, &bgl1, &spec, targets, m));
+        let groups =
+            [0, 1].map(|m| group1(gpu, cache, &bgl1, &t.samplers, &spec.sources, targets, m));
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("md-render preset"),
             bind_group_layouts: &[Some(&self.bgl0), Some(&bgl1)],
@@ -408,7 +491,11 @@ impl PresetLayouts {
             blend_pipeline: alpha,
             flip_pipeline: flip,
             bind_group_0,
-            bind_group_1,
+            group1: Mutex::new(Group1 {
+                generation: targets.generation,
+                groups,
+            }),
+            bgl1,
             uniforms,
             vs_params,
             texsizes,
