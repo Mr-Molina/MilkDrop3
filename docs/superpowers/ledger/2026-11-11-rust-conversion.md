@@ -199,3 +199,5 @@ Task 3.5: minor (deferred): start-timeout edge — if Capture::drop's stop is re
 Task 3.5: complete (commits 3121be7..ad9be3b + fix 5937cc6, review clean after 1 fix round)
 Milestone 3: complete. Owner verification pending: real capture on Linux desktop, Windows, macOS (#[ignore]d tests + `cargo run -p md-audio --example list_devices`).
 Task 4.1: Note (binds Task 4.6): error line numbers are relative to the assembled source (include.fx + defines + body) — 4.6 must offset them to body-relative lines when reporting. Primary API is preprocess_tokens(); preprocess() String is lossy.
+Task 4.1: fix round 1/5 dispatched (Important: unbounded macro expansion — stack overflow / OOM on hostile presets). Ruling: hide-set double-expansion bug (`F(A)` → `A+1+1`) folded in.
+Task 4.1: minor (deferred): expansion overwrites argument token positions with the invocation site; `08` accepted as decimal, `0x1.5` splits, `1e999` → inf without error; spelled() allocs per operator probe; function-like macro rescan beyond replacement unsupported; directives-inside-macro-args untested.
