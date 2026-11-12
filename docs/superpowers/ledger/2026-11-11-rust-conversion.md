@@ -175,3 +175,5 @@ Task 3.1: Note: FFT magnitude is unnormalised (bin-k sine amplitude 100 → 2880
 Tasks 3.1/3.2: minor (deferred): per-frame Vec allocations in AlignWaves/FFT (use fixed scratch); undocumented assert! preconditions in fft.rs; duplicate public module paths; file-level clippy allow in tests; bass test 5× margin.
 Task 3.1: complete (commits 635f19f..ed1df4b, review clean)
 Task 3.2: complete (commits ed1df4b..b1835c5, review clean)
+Task 3.6: Ruling: TimeoutSource is non-generic (`TimeoutSource::new<S: AudioSource + 'static>(inner)`, inner runs on one worker thread); a late frame is prefetched and delivered on the next call, not dropped; Ended is sticky; Drop joins the worker (inner sources must honour the 20 ms worker timeout) — cost if wrong: trivial API change.
+Task 3.3: Note: DeviceInfo { name, description, is_default }; loopback.rs holds per-OS stub `platform` modules that 3.4/3.5 replace.
