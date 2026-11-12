@@ -65,10 +65,10 @@ impl Rect {
         }
     }
     pub const fn width(&self) -> i32 {
-        self.right - self.left
+        self.right.saturating_sub(self.left)
     }
     pub const fn height(&self) -> i32 {
-        self.bottom - self.top
+        self.bottom.saturating_sub(self.top)
     }
 }
 

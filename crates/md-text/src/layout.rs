@@ -3,6 +3,12 @@
 //! The C++ (`textmgr.cpp` -> `ID3DXFont::DrawText`) only ever passes `DT_SINGLELINE`,
 //! `DT_CALCRECT`, `DT_NOPREFIX`, `DT_CENTER`, `DT_RIGHT`, `DT_END_ELLIPSIS`,
 //! `DT_WORD_ELLIPSIS` (plus no flags at all); `DT_WORDBREAK` is only ever commented out.
+//! NOTE: `CTextManager::DrawText[W]` (textmgr.cpp:122/:174, comment ~:604) strips
+//! `DT_WORD_ELLIPSIS | DT_END_ELLIPSIS | DT_NOPREFIX` before drawing ("not supported by
+//! D3DX9"), so *effective* MilkDrop behaviour is no ellipsis and `&` prefix processing
+//! ON. This API keeps the flags; the consumer (md-render text pass, Task 6.6) must apply
+//! the same masking to match MilkDrop.
+//!
 //! Mirrored semantics:
 //!
 //! * Text is top-aligned, never wrapped (no `DT_WORDBREAK`). Without `single_line`,
@@ -72,7 +78,8 @@ fn split_lines(chars: Vec<char>, single_line: bool) -> Vec<Vec<char>> {
 }
 
 fn width_of(atlas: &mut Atlas, s: &[char]) -> i32 {
-    s.iter().map(|&c| atlas.advance(c)).sum()
+    s.iter()
+        .fold(0i32, |acc, &c| acc.saturating_add(atlas.advance(c)))
 }
 
 fn ellipsize(atlas: &mut Atlas, line: &[char], avail: i32, word: bool) -> Vec<char> {
@@ -135,14 +142,16 @@ pub fn layout(atlas: &mut Atlas, text: &str, rect: Rect, flags: TextFlags) -> La
     let bounds = Rect::new(
         rect.left,
         rect.top,
-        rect.left + max_w,
-        rect.top + lh * lines.len() as i32,
+        rect.left.saturating_add(max_w),
+        rect.top
+            .saturating_add(lh.saturating_mul(lines.len().min(i32::MAX as usize) as i32)),
     );
 
     // Rasterize every visible glyph first so that the final texture size is known.
     let mut wanted: Vec<char> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for &c in lines.iter().flatten() {
-        if c != ' ' && !wanted.contains(&c) {
+        if c != ' ' && seen.insert(c) {
             wanted.push(c);
         }
     }
@@ -165,14 +174,19 @@ pub fn layout(atlas: &mut Atlas, text: &str, rect: Rect, flags: TextFlags) -> La
     for (i, line) in lines.iter().enumerate() {
         let mut pen = match flags.align {
             Align::Left => rect.left,
-            Align::Right => rect.right - widths[i],
-            Align::Center => rect.left + (avail - widths[i]) / 2,
+            Align::Right => rect.right.saturating_sub(widths[i]),
+            Align::Center => rect
+                .left
+                .saturating_add(avail.saturating_sub(widths[i]) / 2),
         };
-        let base = rect.top + lh * i as i32 + atlas.ascent();
+        let base = rect
+            .top
+            .saturating_add(lh.saturating_mul(i.min(i32::MAX as usize) as i32))
+            .saturating_add(atlas.ascent());
         for &c in line {
             if let Some(p) = atlas.placed(c) {
-                let x0 = (pen + p.left) as f32;
-                let y0 = (base - p.top) as f32;
+                let x0 = pen.saturating_add(p.left) as f32;
+                let y0 = base.saturating_sub(p.top) as f32;
                 quads.push(GlyphQuad {
                     x0,
                     y0,
@@ -184,7 +198,7 @@ pub fn layout(atlas: &mut Atlas, text: &str, rect: Rect, flags: TextFlags) -> La
                     v1: (p.y + p.h) as f32 / th,
                 });
             }
-            pen += atlas.advance(c);
+            pen = pen.saturating_add(atlas.advance(c));
         }
     }
     Layout { quads, bounds }

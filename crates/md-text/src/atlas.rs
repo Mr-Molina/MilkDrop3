@@ -21,6 +21,8 @@ pub const DEFAULT_INITIAL_SIZE: u32 = 256;
 pub const DEFAULT_MAX_SIZE: u32 = 2048;
 /// Transparent gap (right and bottom of every glyph) so bilinear sampling never bleeds.
 const PAD: u32 = 1;
+/// `FontSpec::size_px` is clamped to `1..=MAX_FONT_PX` (MilkDrop's font sizes are tiny).
+pub const MAX_FONT_PX: u32 = 1024;
 
 /// Region of the texture changed since the last [`Atlas::take_dirty`]. `resized` means
 /// the texture was reallocated (growth or reset): re-create/upload the whole texture
@@ -91,7 +93,7 @@ impl Atlas {
         let loaded = fonts::load(spec, db);
         let initial = initial.max(1);
         let max = max.max(initial);
-        let size_px = spec.size_px.max(1) as i32;
+        let size_px = spec.size_px.clamp(1, MAX_FONT_PX) as i32;
         // Win32 positive lfHeight = ascent + descent: scale so the font's
         // (ascent - descent) is exactly `size_px` pixels.
         let m1 = loaded.font.horizontal_line_metrics(1.0);
@@ -179,6 +181,12 @@ impl Atlas {
     /// and return `Ok`.
     pub(crate) fn ensure(&mut self, ch: char) -> Result<(), ()> {
         if self.placed.contains_key(&ch) {
+            return Ok(());
+        }
+        // Check the glyph's size before rasterizing so huge sizes never allocate a bitmap.
+        let pm = self.font.metrics(ch, self.px);
+        if pm.width as u32 + PAD > self.max || pm.height as u32 + PAD > self.max {
+            self.placed.insert(ch, None); // can never fit: dropped
             return Ok(());
         }
         let (m, bitmap) = self.font.rasterize(ch, self.px);

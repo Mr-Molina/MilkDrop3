@@ -277,3 +277,51 @@ fn layout_is_deterministic() {
     assert_eq!(l1.bounds, l2.bounds);
     assert_eq!(t1, t2);
 }
+
+#[test]
+fn edge_cases_do_not_panic() {
+    let mut a = atlas(20);
+    let l = layout(&mut a, "", BIG, TextFlags::default());
+    assert!(l.quads.is_empty());
+    assert_eq!(l.bounds.height(), 0);
+    let z = layout(
+        &mut a,
+        "abc",
+        Rect::default(),
+        TextFlags {
+            word_ellipsis: true,
+            ..TextFlags::default()
+        },
+    );
+    assert!(z.bounds.right >= 0);
+    let z = layout(
+        &mut a,
+        "abc",
+        Rect::default(),
+        TextFlags {
+            end_ellipsis: true,
+            single_line: true,
+            ..TextFlags::default()
+        },
+    );
+    assert!(z.bounds.right >= 0);
+    let e = layout(&mut a, "\u{1F600}x", BIG, TextFlags::default());
+    assert!(e.bounds.right > 0);
+    let huge = Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX);
+    let _ = layout(
+        &mut a,
+        "a\nb",
+        huge,
+        TextFlags {
+            align: Align::Center,
+            ..TextFlags::default()
+        },
+    );
+    for size in [u32::MAX, 50_000] {
+        let mut a = atlas(size);
+        assert_eq!(a.line_height(), 1024);
+        let l = layout(&mut a, "Wg\nx", BIG, TextFlags::default());
+        assert_eq!(l.bounds.height(), 2048);
+        assert!(a.texture_rgba().1 <= 2048);
+    }
+}
