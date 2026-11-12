@@ -10,3 +10,10 @@ unsafe_code = "deny"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
+
+[dependencies]
+hound.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+md-analysis = { path = "../md-analysis" }
