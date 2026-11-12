@@ -3,6 +3,8 @@
 //! validation pipeline.
 #![allow(dead_code)]
 
+pub mod corpus;
+
 use md_hlsl::{Bindings, ShaderKind, TranslateError, TypedModule};
 
 pub const WARP_PARAMS: &str = "float4 _vDiffuse : COLOR, float4 _uv : TEXCOORD0, \

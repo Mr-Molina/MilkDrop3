@@ -1,15 +1,14 @@
 //! Task 4.4: naga validation of emitted modules — the default warp shader
 //! (hand-wrapped per F25 until Task 4.6 replaced it with `translate`), the
-//! shared uniform layout against naga's layouter, and the whole corpus
-//! through `translate` (every shader must translate and validate).
-//! Run with `cargo test -p md-hlsl --test emit_corpus -- --nocapture`.
+//! shared uniform layout against naga's layouter, and assorted constructs.
+//! The whole-corpus run lives in `tests/corpus.rs`
+//! (`every_corpus_shader_translates_and_validates`, Task 4.9).
 
 mod common;
 
 use common::{asset, naga_validate};
 use md_hlsl::layout::{md_uniform_offset, md_uniforms_wgsl, MD_UNIFORMS_SIZE, MD_UNIFORM_FIELDS};
 use md_hlsl::{translate, PsVersion, ShaderInput, ShaderKind};
-use md_preset::parse_milk;
 
 #[test]
 fn emitted_module_validates_with_naga() {
@@ -84,51 +83,6 @@ fn md_uniforms_layout_matches_naga() {
     assert_eq!(md_hlsl::layout::texsizes_size(0), 16);
     assert_eq!(md_hlsl::layout::texsizes_size(3), 48);
     assert_eq!(md_hlsl::layout::D3D9_PIXEL_SHIFT, 0.5);
-}
-
-/// Every corpus shader (and the shipped defaults) through `translate`
-/// (wrap → check → bindings → emit → naga). Reports counts and failures;
-/// every input must translate (66/66 at Task 4.4), so regressions are caught.
-#[test]
-fn corpus_emission_report() {
-    let mut inputs = vec![
-        ("warp_ps.fx".to_string(), true, asset("warp_ps.fx")),
-        ("comp_ps.fx".to_string(), false, asset("comp_ps.fx")),
-    ];
-    for path in md_testkit::corpus_presets() {
-        let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
-        let p = parse_milk(&text).unwrap();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        inputs.push((format!("{name} warp"), true, p.warp_shader));
-        inputs.push((format!("{name} comp"), false, p.comp_shader));
-    }
-    let preamble = asset("include.fx");
-    let mut failures = Vec::new();
-    for (what, warp, body) in &inputs {
-        let kind = if *warp {
-            ShaderKind::Warp
-        } else {
-            ShaderKind::Comp
-        };
-        let r = translate(&ShaderInput {
-            kind,
-            body,
-            preamble: &preamble,
-            ps_version: PsVersion::Ps2_0,
-        });
-        if let Err(e) = r {
-            failures.push(format!("{what}: {e}"));
-        }
-    }
-    println!(
-        "corpus emission: {}/{} validate with naga",
-        inputs.len() - failures.len(),
-        inputs.len()
-    );
-    for f in &failures {
-        println!("FAIL {f}");
-    }
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// Constructs the corpus barely exercises, each emitted and validated.

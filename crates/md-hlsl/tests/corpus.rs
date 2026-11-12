@@ -1,7 +1,9 @@
 //! Corpus smoke test: preprocess + tokenize every corpus preset's warp and
 //! comp shader text prepended with `include.fx`, plus the shipped default
-//! shader bodies; (Task 4.2) parse the same inputs; and (Task 4.3) type-check
-//! them wrapped as Task 4.6 will.
+//! shader bodies; (Task 4.2) parse the same inputs; (Task 4.3) type-check
+//! them wrapped as Task 4.6 will; and (Task 4.9) translate every one to
+//! naga-validated WGSL. `$MD_EXTRA_PRESETS` adds a real pack to every test
+//! here; `cargo run -p md-hlsl --example triage` groups the failures.
 
 mod common;
 
@@ -128,5 +130,32 @@ fn every_corpus_shader_type_checks() {
         "{} failures:\n{}",
         failures.len(),
         failures.join("\n")
+    );
+}
+
+/// Task 4.9: every corpus preset with a non-empty warp or comp shader (and
+/// the shipped defaults) translates through [`md_hlsl::translate`] (wrap →
+/// check → bindings → emit → naga). Failures are printed as a
+/// `preset | shader | line:col | message` table before the assertion.
+/// Run with `-- --nocapture` for the counts.
+#[test]
+fn every_corpus_shader_translates_and_validates() {
+    let r = common::corpus::run_corpus();
+    assert!(r.presets >= 30, "only {} corpus presets", r.presets);
+    assert!(r.translated >= 66, "only {} shaders", r.translated);
+    println!(
+        "corpus translation: {}/{} shaders from {} presets (+2 defaults) translate and validate",
+        r.translated - r.failures.iter().filter(|f| f.shader != "preset").count(),
+        r.translated,
+        r.presets
+    );
+    if !r.failures.is_empty() {
+        println!("{}", common::corpus::failure_table(&r.failures));
+    }
+    assert_eq!(
+        r.failures.len(),
+        0,
+        "{} corpus failures (table above)",
+        r.failures.len()
     );
 }
