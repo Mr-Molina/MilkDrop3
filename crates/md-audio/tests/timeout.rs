@@ -131,3 +131,31 @@ fn ended_is_sticky() {
     assert_eq!(s.next_frame(&mut l, &mut r, t), FrameStatus::Ended);
     assert_eq!(s.next_frame(&mut l, &mut r, t), FrameStatus::Ended);
 }
+
+struct Panicker;
+
+impl AudioSource for Panicker {
+    fn next_frame(&mut self, _l: &mut [u8; 576], _r: &mut [u8; 576], _t: Duration) -> FrameStatus {
+        panic!("boom");
+    }
+}
+
+#[test]
+fn inner_panic_becomes_sticky_ended() {
+    let mut s = TimeoutSource::new(Panicker);
+    let (mut l, mut r) = ([9u8; 576], [9u8; 576]);
+    let t = Duration::from_secs(5);
+    assert_eq!(s.next_frame(&mut l, &mut r, t), FrameStatus::Ended);
+    assert!(l.iter().chain(r.iter()).all(|&b| b == 0));
+    assert_eq!(s.next_frame(&mut l, &mut r, t), FrameStatus::Ended);
+}
+
+#[test]
+fn huge_timeout_does_not_overflow() {
+    let mut s = TimeoutSource::new(EndsAfterOne(false));
+    let (mut l, mut r) = ([0u8; 576], [0u8; 576]);
+    assert_eq!(
+        s.next_frame(&mut l, &mut r, Duration::MAX),
+        FrameStatus::Data
+    );
+}

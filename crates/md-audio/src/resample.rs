@@ -78,7 +78,10 @@ mod tests {
         assert_eq!(analyzer_convert(l[575]), -127.0);
         assert_eq!(analyzer_convert(l[573]), 127.0);
         let mut a = md_analysis::Analyzer::new();
-        let _ = a.analyze(&l, &r, 30.0);
+        let wave = a.analyze(&l, &r, 30.0).wave;
+        for i in 0..576 {
+            assert_eq!(wave[0][i], analyzer_convert(l[i]), "i={i}");
+        }
         // Silence is 0 and maps back to 0.
         let (mut l, mut r) = ([5u8; 576], [5u8; 576]);
         to_frame(&[], 2, 44_100, &mut l, &mut r);
@@ -124,6 +127,27 @@ mod tests {
             "{} vs {expect}",
             l[0] as i8
         );
+    }
+
+    #[test]
+    fn resamples_22k05_to_44k1() {
+        // Ratio 0.5: output steps by half a source sample; midpoints are interpolated.
+        let s: Vec<f32> = (0..100).map(|i| i as f32 / 200.0).collect();
+        let (mut l, mut r) = ([0u8; 576], [0u8; 576]);
+        to_frame(&s, 1, 22_050, &mut l, &mut r);
+        assert_eq!(l[575] as i8, (99.0f32 / 200.0 * 127.0).round() as i8);
+        let pos: f32 = 99.0 - 0.5;
+        assert_eq!(l[574] as i8, (pos / 200.0 * 127.0).round() as i8);
+        // Only ~199 output samples exist; the older ones are silence.
+        assert!(l[..300].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn short_input_is_left_padded_with_silence() {
+        let (mut l, mut r) = ([9u8; 576], [9u8; 576]);
+        to_frame(&[0.5; 10], 1, 44_100, &mut l, &mut r);
+        assert!(l[..566].iter().all(|&b| b == 0));
+        assert!(l[566..].iter().all(|&b| b as i8 == 64));
     }
 
     #[test]

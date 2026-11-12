@@ -65,7 +65,8 @@ struct Slot {
 /// unbounded backlog). If the caller's timeout expires first, `next_frame` returns
 /// [`FrameStatus::Silence`] with both buffers zeroed. A frame that arrives late is not
 /// dropped: it stays in the slot and is delivered by the next call. After the inner
-/// source reports `Ended`, every call returns `Ended`. Dropping the wrapper stops and
+/// source reports `Ended` (or panics: the panic is caught, logged with `eprintln!`, and
+/// treated as `Ended`), every call returns `Ended`. Dropping the wrapper stops and
 /// joins the worker, so no thread leaks; the inner source must honor the timeout it is
 /// given (the worker passes 20 ms) for the join to be prompt.
 pub struct TimeoutSource {
@@ -108,7 +109,19 @@ fn worker_loop<S: AudioSource>(mut inner: S, shared: &Shared) {
                 return;
             }
         }
-        let status = inner.next_frame(&mut left, &mut right, POLL);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            inner.next_frame(&mut left, &mut right, POLL)
+        }));
+        let status = match result {
+            Ok(status) => status,
+            Err(_) => {
+                // Surface the failure as a sticky Ended instead of silent Silence forever.
+                eprintln!("md-audio: inner audio source panicked; treating it as ended");
+                left.fill(0);
+                right.fill(0);
+                FrameStatus::Ended
+            }
+        };
         let mut slot = shared.slot.lock().unwrap();
         if slot.stop {
             return;
@@ -132,7 +145,11 @@ impl AudioSource for TimeoutSource {
         right: &mut [u8; 576],
         timeout: Duration,
     ) -> FrameStatus {
-        let deadline = Instant::now() + timeout;
+        let now0 = Instant::now();
+        // Saturate huge timeouts (e.g. Duration::MAX) to a far-future deadline.
+        let deadline = now0
+            .checked_add(timeout)
+            .unwrap_or_else(|| now0 + Duration::from_secs(86_400 * 365));
         let mut slot = self.shared.slot.lock().unwrap();
         loop {
             if let Some(f) = slot.frame.take() {

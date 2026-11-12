@@ -219,6 +219,94 @@ mod tests {
         ));
     }
 
+    fn write_wav<T: hound::Sample + Copy>(
+        spec: hound::WavSpec,
+        frames: usize,
+        value: T,
+    ) -> Vec<u8> {
+        let mut buf = Cursor::new(Vec::new());
+        {
+            let mut w = hound::WavWriter::new(&mut buf, spec).unwrap();
+            for _ in 0..frames * spec.channels as usize {
+                w.write_sample(value).unwrap();
+            }
+            w.finalize().unwrap();
+        }
+        buf.into_inner()
+    }
+
+    fn first_frame(bytes: Vec<u8>) -> ([u8; 576], [u8; 576]) {
+        let mut s = WavSource::from_reader(Cursor::new(bytes), false, 30.0).unwrap();
+        let (mut l, mut r) = ([0u8; 576], [0u8; 576]);
+        assert_eq!(
+            s.next_frame(&mut l, &mut r, Duration::ZERO),
+            FrameStatus::Data
+        );
+        (l, r)
+    }
+
+    fn spec(channels: u16, bits: u16, fmt: hound::SampleFormat) -> hound::WavSpec {
+        hound::WavSpec {
+            channels,
+            sample_rate: 44_100,
+            bits_per_sample: bits,
+            sample_format: fmt,
+        }
+    }
+
+    #[test]
+    fn all_sample_formats_decode_to_half_scale() {
+        use hound::SampleFormat::{Float, Int};
+        // Each file holds a constant of half full-scale: expect round(0.5 * 127) = 64.
+        let cases: Vec<Vec<u8>> = vec![
+            write_wav(spec(1, 8, Int), 3000, 64i8),
+            write_wav(spec(1, 16, Int), 3000, 16384i16),
+            write_wav(spec(1, 24, Int), 3000, 1i32 << 22),
+            write_wav(spec(1, 32, Int), 3000, 1i32 << 30),
+            write_wav(spec(1, 32, Float), 3000, 0.5f32),
+        ];
+        for (i, bytes) in cases.into_iter().enumerate() {
+            let (l, r) = first_frame(bytes);
+            assert!(
+                l.iter().all(|&b| b as i8 == 64),
+                "case {i}: {}",
+                l[575] as i8
+            );
+            assert_eq!(l, r);
+        }
+    }
+
+    #[test]
+    fn wav_shorter_than_one_window() {
+        let (l, r) = first_frame(write_wav(
+            spec(1, 16, hound::SampleFormat::Int),
+            100,
+            16384i16,
+        ));
+        // Only 100 samples exist: the older 476 outputs are silence.
+        assert!(l[..476].iter().all(|&b| b == 0));
+        assert!(l[476..].iter().all(|&b| b as i8 == 64));
+        assert_eq!(l, r);
+    }
+
+    #[test]
+    fn more_than_two_channels_use_first_two() {
+        let mut buf = Cursor::new(Vec::new());
+        {
+            let mut w =
+                hound::WavWriter::new(&mut buf, spec(3, 16, hound::SampleFormat::Int)).unwrap();
+            for _ in 0..3000 {
+                for v in [16384i16, -16384, 32767] {
+                    w.write_sample(v).unwrap();
+                }
+            }
+            w.finalize().unwrap();
+        }
+        let (l, r) = first_frame(buf.into_inner());
+        assert!(l.iter().all(|&b| b as i8 == 64));
+        assert!(r.iter().all(|&b| b as i8 == -64));
+    }
+
     #[test]
     fn step_rounds_rate_over_fps() {
         let s = WavSource::from_reader(Cursor::new(wav_bytes(48_000, 1, 10)), false, 60.0).unwrap();
