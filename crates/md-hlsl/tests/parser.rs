@@ -62,6 +62,7 @@ fn sx(e: &Expr) -> String {
             cond, then, els, ..
         } => format!("(? {} {} {})", sx(cond), sx(then), sx(els)),
         Expr::Cast { ty, expr, .. } => format!("(cast {:?} {})", ty.kind, sx(expr)),
+        Expr::Splat { ty, expr, .. } => format!("(splat {:?} {})", ty.kind, sx(expr)),
     }
 }
 

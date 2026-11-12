@@ -379,6 +379,16 @@ pub enum Expr {
         ty: TypeName,
         expr: Box<Expr>,
     },
+    /// Replicate a scalar into every component of a vector or matrix type
+    /// (F26). The parser never produces it; AST-level passes may insert it,
+    /// and the type checker accepts it (the scalar is converted to the
+    /// target's element type first). The checker's typed tree has its own
+    /// `Splat` for the implicit splats it makes explicit.
+    Splat {
+        pos: Pos,
+        ty: TypeName,
+        expr: Box<Expr>,
+    },
 }
 
 impl Expr {
@@ -396,7 +406,8 @@ impl Expr {
             | Expr::Binary { pos, .. }
             | Expr::Assign { pos, .. }
             | Expr::Ternary { pos, .. }
-            | Expr::Cast { pos, .. } => *pos,
+            | Expr::Cast { pos, .. }
+            | Expr::Splat { pos, .. } => *pos,
         }
     }
 }
