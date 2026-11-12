@@ -231,3 +231,5 @@ Task 4.3: complete (commits acc48b4..be28b54 + fix 433cacc, review clean after 1
 Next: Task 4.5 runs BEFORE Task 4.4 (preflight F25).
 Task 4.5: Ruling: unknown two-letter sampler prefixes are peeled with wrap+bilinear defaults as plugin.cpp does (`sampler_no_such_x` → root `such_x`); a sampler counts as referenced if reachable from PS through user calls and initializers of referenced globals; slots in declaration order of bound samplers, 17th is an error; a referenced cube sampler is an error — cost if wrong: none (C++ parity).
 Task 4.5: Note (binds md-render 5.x): Translated.texsize_names holds FULL global names (texsize_main, texsize_rand01); map via md_hlsl::texsize_root; rand texsizes map BY SLOT to the texture picked for that randNN slot regardless of the sampler's filter prefix. Bindings also exposes highest_blur (0..3).
+Task 4.5: minor (deferred): `rand16_foo`-style out-of-range suffixed names keep root `rand16_foo` (C++ truncates to `rand16`); redundant O(n²) membership check; linear decl scans.
+Task 4.5: complete (commits bf2c68d..eaf2a36, review clean)
