@@ -21,14 +21,24 @@
 //!   uniforms) becomes `var<private> h_<name>` initialised at the start of
 //!   `fs_main` from `U`/`T` — user functions see the same copy;
 //! - any other uniform (a body-declared `float4 foo;`, which MilkDrop never
-//!   sets) is a `var<private>` initialised from its initializer, else zero;
+//!   sets) is a `var<private>` initialised from its initializer, else zero.
+//!   This differs from the C++: plugin.cpp never applies constant-table
+//!   defaults (no `SetDefaults`), so there the value is undefined (whatever
+//!   the constant register last held); the initializer is the author's
+//!   evident intent;
 //! - `static` globals are `var<private>` whose initializers run at the
 //!   start of `fs_main`, in declaration order;
 //! - `static const` globals are `const` when the initializer is a WGSL
 //!   const-expression, else they are treated like `static` globals;
 //! - samplers become the `tex_i`/`samp_i` pair of their [`Bindings`] slot.
 //!
-//! Only declarations reachable from `PS` are emitted. `PS` itself becomes
+//! Literals: a float literal outside the `f32` range becomes `±f32::MAX`
+//! (fxc produced infinity; WGSL rejects an out-of-range literal) and NaN
+//! becomes `0.0`; an int literal is saturated to `0..=i32::MAX` (literals
+//! are never negative: `-` is a separate operator).
+//!
+//! Only declarations (globals, functions, structs) reachable from `PS` are
+//! emitted. `PS` itself becomes
 //! the ordinary function `h_PS`, called by `fs_main`, which maps each `PS`
 //! parameter by semantic: `COLOR`/`COLOR0` ← `in.diffuse`, `TEXCOORD`/
 //! `TEXCOORD0` ← `in.uv`, `TEXCOORD1` ← `in.rad_ang` (truncated to the
@@ -40,8 +50,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::{Lit, Pos};
-use crate::bindings::{reach, Bindings};
-use crate::emit_stmt::Fx;
+use crate::bindings::{reach, Bindings, Reach};
+use crate::emit_stmt::{visit_types, Fx};
 use crate::layout::{self, md_uniform_kind, TEXSIZES_PLACEHOLDER};
 use crate::typed::{
     Storage, TDecl, TExpr, TExprKind, TFunction, TGlobal, TStruct, TypedModule, VarOrigin,
@@ -122,10 +132,11 @@ pub fn emit(m: &TypedModule, kind: ShaderKind, bindings: &Bindings) -> R<String>
         global(&mut cx, g, bindings, &mut decls, &mut inits)?;
     }
 
+    let structs = used_structs(m, &reach);
     let mut body = String::new();
     for d in &m.decls {
         match d {
-            TDecl::Struct(s) => body += &struct_decl(s)?,
+            TDecl::Struct(s) if structs.contains(s.name.as_str()) => body += &struct_decl(s)?,
             TDecl::Function(f) if reach.fns.contains(f.name.as_str()) => {
                 body += &Fx::new(&cx).function(f)?;
                 body.push('\n');
@@ -302,6 +313,42 @@ fn is_const_expr(e: &TExpr, consts: &HashSet<&str>) -> bool {
         }
         _ => false,
     }
+}
+
+/// Names of the structs reachable code uses (directly, in arrays, or as
+/// fields of other used structs); unused structs are not emitted.
+fn used_structs<'a>(m: &'a TypedModule, reach: &Reach) -> HashSet<&'a str> {
+    fn add<'a>(t: &'a Ty, out: &mut Vec<&'a str>) {
+        match t {
+            Ty::Struct(n) => out.push(n),
+            Ty::Array(e, _) => add(e, out),
+            _ => {}
+        }
+    }
+    let mut todo = Vec::new();
+    for d in &m.decls {
+        match d {
+            TDecl::Global(g) if reach.globals.contains(g.name.as_str()) => add(&g.ty, &mut todo),
+            TDecl::Function(f) if reach.fns.contains(f.name.as_str()) => {
+                visit_types(f, &mut |t| add(t, &mut todo))
+            }
+            _ => {}
+        }
+    }
+    let mut used = HashSet::new();
+    while let Some(n) = todo.pop() {
+        if !used.insert(n) {
+            continue;
+        }
+        for d in &m.decls {
+            if let TDecl::Struct(s) = d {
+                if s.name == n {
+                    s.fields.iter().for_each(|f| add(&f.ty, &mut todo));
+                }
+            }
+        }
+    }
+    used
 }
 
 fn struct_decl(s: &TStruct) -> R<String> {

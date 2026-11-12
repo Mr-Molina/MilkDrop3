@@ -363,3 +363,15 @@ fn deep_expressions_do_not_overflow() {
         .join()
         .unwrap();
 }
+
+#[test]
+fn only_reachable_structs_are_emitted() {
+    // An unused struct WGSL cannot express must not fail the shader.
+    let w = emit_ok(
+        "struct Bad { int2x2 m; }; struct Inner { float x; }; \
+         struct Outer { Inner i[2]; }; struct Unused { float y; };",
+        "Outer o; o.i[1].x = 2; _return_value = o.i[1].x;",
+    );
+    has(&w, &["struct h_Outer {", "struct h_Inner {"]);
+    assert!(!w.contains("h_Bad") && !w.contains("h_Unused"), "{w}");
+}

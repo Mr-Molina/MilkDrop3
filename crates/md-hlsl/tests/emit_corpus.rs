@@ -1,7 +1,6 @@
 //! Task 4.4: naga validation of emitted modules — the hand-wrapped default
 //! warp fixture (F25), the shared uniform layout against naga's layouter,
-//! and a report over the whole corpus (Task 4.9 triages failures; this
-//! test does not require 100%).
+//! and the whole corpus (every shader must validate).
 //! Run with `cargo test -p md-hlsl --test emit_corpus -- --nocapture`.
 
 mod common;
@@ -83,8 +82,8 @@ fn md_uniforms_layout_matches_naga() {
 }
 
 /// Every corpus shader (and the shipped defaults): check → bindings → emit
-/// → naga. Reports counts and failures; asserts only that the shipped
-/// default shaders validate.
+/// → naga. Reports counts and failures; every input must validate (66/66
+/// at Task 4.4), so regressions are caught.
 #[test]
 fn corpus_emission_report() {
     let mut inputs = vec![
@@ -126,12 +125,7 @@ fn corpus_emission_report() {
     for f in &failures {
         println!("FAIL {f}");
     }
-    assert!(
-        !failures
-            .iter()
-            .any(|f| f.starts_with("warp_ps.fx") || f.starts_with("comp_ps.fx")),
-        "{failures:?}"
-    );
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// Constructs the corpus barely exercises, each emitted and validated.

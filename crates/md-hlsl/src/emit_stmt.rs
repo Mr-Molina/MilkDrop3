@@ -470,6 +470,33 @@ fn written_params<'f>(cx: &Ctx, f: &'f TFunction) -> HashSet<&'f str> {
         .collect()
 }
 
+/// Visit every type a function mentions: parameters, return, locals and
+/// every expression's type.
+pub(crate) fn visit_types<'e>(f: &'e TFunction, v: &mut impl FnMut(&'e Ty)) {
+    fn locals<'e>(s: &'e TStmt, v: &mut impl FnMut(&'e Ty)) {
+        match s {
+            TStmt::Local(l) => v(&l.ty),
+            TStmt::If { then, els, .. } => {
+                locals(then, v);
+                if let Some(e) = els {
+                    locals(e, v);
+                }
+            }
+            TStmt::For { body, .. } | TStmt::While { body, .. } | TStmt::DoWhile { body, .. } => {
+                locals(body, v)
+            }
+            TStmt::Block(b) => b.stmts.iter().for_each(|s| locals(s, v)),
+            _ => {}
+        }
+    }
+    v(&f.ret);
+    f.params.iter().for_each(|p| v(&p.ty));
+    for s in &f.body.stmts {
+        locals(s, v);
+        walk_stmt(s, &mut |e| v(&e.ty));
+    }
+}
+
 /// Visit every expression (pre-order) of a statement.
 fn walk_stmt<'e>(s: &'e TStmt, f: &mut impl FnMut(&'e TExpr)) {
     let ex = |e: &'e TExpr, f: &mut _| walk_expr(e, f);

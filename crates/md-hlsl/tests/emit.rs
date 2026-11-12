@@ -170,7 +170,24 @@ fn log10_divides_natural_logs() {
 #[test]
 fn sincos_becomes_two_statements() {
     let w = emit_ok("", "float s, c; sincos(_c0.x, s, c);");
-    has(&w, &["h_s = sin(U._c0.x);\n    h_c = cos(U._c0.x);"]);
+    has(
+        &w,
+        &["let md_t0 = U._c0.x;\n    h_s = sin(md_t0);\n    h_c = cos(md_t0);"],
+    );
+}
+
+#[test]
+fn sincos_takes_x_by_value_when_it_aliases_an_output() {
+    let w = emit_ok("", "float a = 1, b; sincos(a, a, b);");
+    has(
+        &w,
+        &["let md_t0 = h_a;\n    h_a = sin(md_t0);\n    h_b = cos(md_t0);"],
+    );
+    let w = emit_ok("", "float4 v = _c0; sincos(v.x, v.x, v.y);");
+    has(
+        &w,
+        &["let md_t0 = h_v.x;\n    h_v.x = sin(md_t0);\n    h_v.y = cos(md_t0);"],
+    );
 }
 
 #[test]

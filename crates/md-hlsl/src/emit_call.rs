@@ -28,7 +28,7 @@
 //! | `fmod(a, b)` | `(a % b)` (WGSL float `%` is `a - b * trunc(a / b)`) |
 //! | `log10(x)` | `(log(x) / log(10.0))` |
 //! | `sign(x)` | `i32(sign(x))` / `vecN<i32>(sign(x))` (HLSL returns int) |
-//! | `sincos(x, s, c)` | `s = sin(x); c = cos(x);` (two statements) |
+//! | `sincos(x, s, c)` | `let t = x; s = sin(t); c = cos(t);` (x captured: it may alias `s`) |
 //! | `modf(x, ip)` | `let t = modf(x); ip = t.whole;` → `t.fract` |
 //! | `frexp(x, e)` | `let t = frexp(x); e = f32(t.exp);` → `t.fract` |
 //! | `ldexp(x, e)` | `(x * exp2(e))` (HLSL's exponent is a float) |
@@ -143,7 +143,14 @@ impl Fx<'_, '_> {
         }
         match i {
             I::Sincos => {
-                let x = self.cheap(&args[0])?;
+                // `x` is passed by value: capture it before the first write,
+                // which may alias it (`sincos(a, a, b)`).
+                let x = self.expr(&args[0])?;
+                let x = if crate::emit_expr::is_lit(&args[0]) {
+                    x
+                } else {
+                    self.snapshot(x)
+                };
                 let s = self.place(&args[1])?;
                 self.write(&s, format!("sin({x})"));
                 let c = self.place(&args[2])?;
