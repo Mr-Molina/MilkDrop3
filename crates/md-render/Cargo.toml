@@ -7,3 +7,10 @@ publish = false
 
 [lints]
 workspace = true
+
+[dependencies]
+wgpu.workspace = true
+md-hlsl = { path = "../md-hlsl" }
+
+[dev-dependencies]
+naga = { workspace = true, features = ["wgsl-in"] }
