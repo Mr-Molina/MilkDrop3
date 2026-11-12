@@ -202,3 +202,4 @@ Task 4.1: Note (binds Task 4.6): error line numbers are relative to the assemble
 Task 4.1: fix round 1/5 dispatched (Important: unbounded macro expansion — stack overflow / OOM on hostile presets). Ruling: hide-set double-expansion bug (`F(A)` → `A+1+1`) folded in.
 Task 4.1: minor (deferred): expansion overwrites argument token positions with the invocation site; `08` accepted as decimal, `0x1.5` splits, `1e999` → inf without error; spelled() allocs per operator probe; function-like macro rescan beyond replacement unsupported; directives-inside-macro-args untested.
 Task 4.1: fix round 1/5 (1 addressed [hide-sets; depth cap], 1 open — token budget per segment, not per input; commits 12dbf39..b6f604d). Fix round 2 dispatched.
+Task 4.1: fix round 2/5 (interleaved-segment attack addressed; new open: argument-substitution clones uncharged → OOM via F(D17) with 300-use body; commits 323cb57..d91a93a). Fix round 3 dispatched.
