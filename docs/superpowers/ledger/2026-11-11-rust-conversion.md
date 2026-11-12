@@ -190,3 +190,5 @@ Task 3.4: minor (deferred): Vec alloc under ring mutex per next_frame; eprintln!
 Task 3.4: fix round 1/5 (3 addressed, 0 open; commits 6db75d8..2462a45)
 Task 3.4: minor (deferred): a detached capture thread can briefly hold the PA stream after drop (two record streams if reopened immediately).
 Task 3.4: complete (commits e8fadc3..0919af9 + fix 2462a45, review clean after 1 fix round)
+Task 3.5: Ruling: Windows uses cpal 0.18.2 (its WASAPI host sets the loopback flag for input streams on render endpoints — no unsafe on Windows); macOS uses objc2-screen-capture-kit at 48 kHz with 8 item-scoped `allow(unsafe_code)` + SAFETY comments; macOS open_device supports only "system"; the `screencapturekit` pin is removed; all three backends share a new capture_ring.rs (Pulse refactored onto it; Pulse missing-source now maps to DeviceNotFound) — cost if wrong: macOS/Windows capture untested on real hardware.
+Task 3.5: Note (owner verification): run the #[ignore]d capture tests once on a Mac (CoreMedia non-interleaved layout assumption; possible CoreGraphics connection need) and on Windows.
