@@ -165,3 +165,7 @@ Task 2.3: complete (commits 21d9086..a16f567, review clean)
 Task 2.4: Ruling: writer follows Export — backtick on EVERY warp/comp line and none on EEL lines (brief said only `[`/`;` lines); per-key formats per state.cpp (%.5f zoom/rot/dx/dy/warp/sx/sy/fZoomExponent, %.3f cx/cy, …) per F18; round-trip property = one trip changes floats only within written precision, parse(write(p)) is an exact fixed point, write∘parse∘write == write; exact field round trip uses all_keys_exact.milk — cost if wrong: none (C++ parity).
 Task 2.5: Ruling: start_blend takes `from: &Preset` per A.3 and cannot write back into the old state as StartBlendFrom does (it freezes the old preset's motion-vector values) — Task 7.5 must apply that freeze on the old preset itself when it starts a blend — cost if wrong: motion vectors of a preset that was itself mid-blend (or a blend < 0.001 s) differ from C++.
 Task 2.5: Note: new public API `Transition` (in Preset::transition: blend flag, start, duration, old echo alpha/orientation, old wave mode) and `Blendable::start_blend_from` (stores duration as given).
+Tasks 2.4/2.5: minor (deferred): %.5f-vs-%.3f per-key formats only spot-checked (rot/dx/dy/warp/sx/sy, wave smoothing, shape ang/tex_ang/tex_zoom unguarded); transition.rs:144 count assert is vacuous (nothing guards a field dropped from the blendables macro); tests/parse.rs at 595 lines.
+Task 2.4: complete (commits 8e97d42..47d0dcb, review clean)
+Task 2.5: complete (commits 47d0dcb..eb328fa, review clean)
+Milestone 2: complete.

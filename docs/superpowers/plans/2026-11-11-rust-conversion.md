@@ -437,11 +437,11 @@ The `.milk` format is an INI file with a single `[preset00]` section, scalar key
 **Interfaces:**
 - Produces: `Preset::to_milk(&self) -> String` emitting `[preset00]`, then scalars in the order `CState::Export` writes them, floats with `%.3f` for most and `%.6f` for `zoom`, `rot`, `cx`, `cy`, `dx`, `dy`, `warp`, `sx`, `sy` (match `state.cpp` formats; record each in a comment), then code blocks as numbered lines; lines starting with `[` or `;` in code get a backtick prefix.
 
-- [ ] **Step 1:** Write failing tests `round_trip_preserves_every_field` (`parse_milk(p.to_milk()) == p` for the all-keys fixture), `code_line_starting_with_bracket_gets_backtick`, `corpus_round_trip_is_stable` (for every corpus preset, `parse(write(parse(x))) == parse(x)`).
-- [ ] **Step 2:** Run the tests. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(preset): writer with round-trip tests`
+- [x] **Step 1:** Write failing tests `round_trip_preserves_every_field` (`parse_milk(p.to_milk()) == p` for the all-keys fixture), `code_line_starting_with_bracket_gets_backtick`, `corpus_round_trip_is_stable` (for every corpus preset, `parse(write(parse(x))) == parse(x)`).
+- [x] **Step 2:** Run the tests. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(preset): writer with round-trip tests`
 
 ### Task 2.5: Corpus parse test and preset blending
 
@@ -451,11 +451,11 @@ The `.milk` format is an INI file with a single `[preset00]` section, scalar key
 **Interfaces:**
 - Produces: `Preset::start_blend(&mut self, from: &Preset, now: f32, duration: f32)` which, for each blendable field, calls `blend_to(from.value, self.value, now, now + duration)`; non-blendable fields switch immediately (as `CState::StartBlendFrom`).
 
-- [ ] **Step 1:** Write failing tests `every_corpus_preset_parses_without_error`, `blend_midpoint_is_average_for_blendable_fields`, `non_blendable_fields_switch_immediately`.
-- [ ] **Step 2:** Run `cargo test -p md-preset`. Expected: FAIL.
-- [ ] **Step 3:** Implement `transition.rs`.
-- [ ] **Step 4:** Run the tests. Expected: PASS, corpus at 100%.
-- [ ] **Step 5:** Commit: `feat(preset): blending and corpus parse test`
+- [x] **Step 1:** Write failing tests `every_corpus_preset_parses_without_error`, `blend_midpoint_is_average_for_blendable_fields`, `non_blendable_fields_switch_immediately`.
+- [x] **Step 2:** Run `cargo test -p md-preset`. Expected: FAIL.
+- [x] **Step 3:** Implement `transition.rs`.
+- [x] **Step 4:** Run the tests. Expected: PASS, corpus at 100%.
+- [x] **Step 5:** Commit: `feat(preset): blending and corpus parse test`
 
 ## Milestone 3: `md-analysis` and `md-audio`
 
