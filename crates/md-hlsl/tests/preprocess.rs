@@ -107,7 +107,10 @@ fn deep_nesting_is_an_error_not_a_crash() {
     let src = format!("#define F(x) x\n{}1{}", "F(".repeat(n), ")".repeat(n));
     let t = std::time::Instant::now();
     let e = preprocess_tokens(&src).unwrap_err();
-    assert!(e.message.contains("too deeply"), "{e}");
+    assert!(
+        e.message.contains("too deeply") || e.message.contains("too large"),
+        "{e}"
+    );
     assert!(t.elapsed().as_secs() < 5);
 }
 
@@ -150,4 +153,20 @@ fn budget_is_ample_for_include_fx_and_corpus_sized_input() {
     .unwrap();
     // include.fx repeated 20 times (with redefinitions) still fits.
     preprocess_tokens(&inc.repeat(20)).unwrap();
+}
+
+#[test]
+fn argument_substitution_is_charged_before_allocation() {
+    // D17 expands to 2^17 tokens; F uses its argument 300 times (~39M tokens
+    // if substituted). The budget must trip before that is allocated.
+    let mut src = String::from("#define D0 x\n");
+    for i in 1..=17 {
+        src.push_str(&format!("#define D{i} D{} D{}\n", i - 1, i - 1));
+    }
+    let uses = vec!["x"; 300].join(" ");
+    src.push_str(&format!("#define F(x) {uses}\nF(D17)\n"));
+    let t = std::time::Instant::now();
+    let e = preprocess_tokens(&src).unwrap_err();
+    assert!(e.message.contains("too large"), "{e}");
+    assert!(t.elapsed().as_secs() < 10);
 }

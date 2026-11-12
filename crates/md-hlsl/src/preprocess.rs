@@ -206,6 +206,22 @@ struct Limits {
     produced: usize,
 }
 
+impl Limits {
+    /// Charge `n` tokens (examined or about to be allocated) against the
+    /// whole-input budget; fails BEFORE the caller allocates them.
+    fn charge(&mut self, n: usize, at: &Token) -> Result<(), TranslateError> {
+        self.produced = self.produced.saturating_add(n);
+        if self.produced > MAX_TOKENS {
+            return Err(TranslateError::new(
+                at.line,
+                at.col,
+                "macro expansion too large",
+            ));
+        }
+        Ok(())
+    }
+}
+
 fn expand(
     toks: &[Token],
     macros: &Macros,
@@ -242,14 +258,7 @@ fn expand_p(
                 "macro expansion nested too deeply",
             ));
         }
-        limits.produced += 1;
-        if limits.produced > MAX_TOKENS {
-            return Err(TranslateError::new(
-                t.line,
-                t.col,
-                "macro expansion too large",
-            ));
-        }
+        limits.charge(1, t)?;
         let Some((name, m)) = t.ident().and_then(|n| macros.get(n).map(|m| (n, m))) else {
             out.push(pt.clone());
             i += 1;
@@ -266,6 +275,7 @@ fn expand_p(
         let mut replacement: Vec<PTok> = Vec::new();
         match &m.params {
             None => {
+                limits.charge(m.body.len(), t)?;
                 replacement.extend(m.body.iter().map(|b| PTok {
                     tok: b.clone(),
                     blue: false,
@@ -279,6 +289,7 @@ fn expand_p(
                     continue;
                 }
                 let (args, next) = collect_args(toks, i + 2, t)?;
+                limits.charge(args.iter().map(Vec::len).sum(), t)?;
                 let n_args = if params.is_empty() && args.len() == 1 && args[0].is_empty() {
                     0
                 } else {
@@ -300,7 +311,10 @@ fn expand_p(
                     .collect::<Result<_, _>>()?;
                 for b in &m.body {
                     match b.ident().and_then(|id| params.iter().position(|p| p == id)) {
-                        Some(p) => replacement.extend(expanded[p].iter().cloned()),
+                        Some(p) => {
+                            limits.charge(expanded[p].len(), t)?;
+                            replacement.extend(expanded[p].iter().cloned());
+                        }
                         None => replacement.push(PTok {
                             tok: b.clone(),
                             blue: false,
