@@ -34,15 +34,19 @@ pub enum FixedMode {
     /// `SELECTARG1 TEXTURE`: the texture alone (`fixed_tex_select.wgsl`);
     /// no C++ draw uses it, md-render's own copies do.
     TexSelect,
+    /// Glyph-atlas text (Task 6.6): `(color.rgb, color.a * atlas.a)`
+    /// (`text.wgsl`).
+    Text,
 }
 
 impl FixedMode {
     /// Every mode, for iteration.
-    pub const ALL: [FixedMode; 4] = [
+    pub const ALL: [FixedMode; 5] = [
         FixedMode::Color,
         FixedMode::TexModulate,
         FixedMode::TexModulateAlpha,
         FixedMode::TexSelect,
+        FixedMode::Text,
     ];
 
     /// Whether the mode samples a texture (bind group 1).
@@ -61,6 +65,7 @@ impl FixedMode {
                 include_str!("../../../assets/shaders/fixed_tex_modulate_alpha.wgsl")
             }
             FixedMode::TexSelect => include_str!("../../../assets/shaders/fixed_tex_select.wgsl"),
+            FixedMode::Text => include_str!("../../../assets/shaders/text.wgsl"),
         }
     }
 

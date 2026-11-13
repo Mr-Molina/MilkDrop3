@@ -855,6 +855,7 @@ dependencies = [
  "md-hlsl",
  "md-preset",
  "md-testkit",
+ "md-text",
  "naga",
  "rand_core",
  "rand_pcg",

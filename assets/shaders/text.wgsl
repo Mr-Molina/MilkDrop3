@@ -2,7 +2,7 @@
 // is the vertex colour with its alpha scaled by the glyph coverage:
 // rgb = color.rgb, a = color.a * atlas.a (straight alpha; md-render blends
 // SRCALPHA / INVSRCALPHA). Dark boxes behind text use fixed_color.wgsl.
-// Task 6.6 may adjust this shader.
+// Used as FixedMode::Text by the text pass (Task 6.6).
 //
 // Bindings: @group(0) @binding(2) VsParams (D3D9 raster shift; texel_size =
 // 1 / target size, pixel_shift = md_hlsl::layout::D3D9_PIXEL_SHIFT),

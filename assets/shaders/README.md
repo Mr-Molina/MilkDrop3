@@ -16,7 +16,7 @@ block layouts documented here.
 | `fixed_tex_modulate.wgsl` | D3D9 fixed function: rgb texture × diffuse, alpha diffuse | `vs_main`, `fs_main` |
 | `fixed_tex_modulate_alpha.wgsl` | D3D9 fixed function: rgba texture × diffuse (sprite mode 4) | `vs_main`, `fs_main` |
 | `fixed_tex_select.wgsl` | D3D9 fixed function: texture only | `vs_main`, `fs_main` |
-| `text.wgsl` | glyph-atlas text (Task 6.6 may adjust) | `vs_main`, `fs_main` |
+| `text.wgsl` | glyph-atlas text (`FixedMode::Text`, Task 6.6) | `vs_main`, `fs_main` |
 | `title.wgsl` | song-title texture (Task 6.7 may adjust) | `vs_main`, `fs_main` |
 
 The other three `data/*.fx` files are not here: `warp_ps.fx` and `comp_ps.fx`

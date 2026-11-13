@@ -69,7 +69,7 @@ const MAX_VS_BIND_GROUPS: usize = 16;
 #[derive(Debug, Default)]
 pub struct PipelineCache {
     layouts: Option<Layouts>,
-    shaders: [Option<wgpu::ShaderModule>; 4],
+    shaders: [Option<wgpu::ShaderModule>; FixedMode::ALL.len()],
     pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
     samplers: HashMap<SamplerKind, wgpu::Sampler>,
     vs_groups: HashMap<(u32, u32), wgpu::BindGroup>,

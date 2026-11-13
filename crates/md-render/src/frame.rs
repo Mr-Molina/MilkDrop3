@@ -14,8 +14,10 @@
 //!    ([`Renderer::draw_sprites_fixed`], 6.5), the song title burn-in
 //!    (6.7, a hook), drawn into the warp target (no mips to regenerate: the main textures have one level);
 //! 5. ([`Renderer::present`]) the composite into the caller's target
-//!    ([`crate::comp`]), then title/user sprites on top (Milestone 6
-//!    hooks), one submit, and the ping-pong swap ([`Renderer::swap_vs`]).
+//!    ([`crate::comp`]), then the text pass queued by [`Renderer::flush_text`]
+//!    (6.6) drawn over it in the composite intermediate, title/user sprites
+//!    on top (Milestone 6 hooks), one submit, and the ping-pong swap
+//!    ([`Renderer::swap_vs`]).
 //!
 //! Uniforms go through `Queue::write_buffer`, so each preset program is
 //! written once per submission: the old and new presets of a blend must be
@@ -178,6 +180,9 @@ impl<'a> FrameInput<'a> {
 pub struct FrameCtx<'a> {
     encoder: wgpu::CommandEncoder,
     comp: CompFrame<'a>,
+    /// Text and boxes queued by [`Renderer::flush_text`] (6.6), drawn over
+    /// the composite by `present`.
+    pub(crate) text: Vec<crate::text_draw::TextDraw>,
 }
 
 impl std::fmt::Debug for FrameCtx<'_> {
@@ -295,7 +300,11 @@ impl Renderer {
         self.draw_sprites_fixed(&mut encoder, input.vars);
 
         let comp = self.prepare_comp(input, &frame, snap, fixed_sampler);
-        FrameCtx { encoder, comp }
+        FrameCtx {
+            encoder,
+            comp,
+            text: Vec::new(),
+        }
     }
 
     /// The composite's vertex data, plans and uniforms
@@ -394,8 +403,12 @@ impl Renderer {
     /// If `target`'s texture format is sRGB (the C++ back buffer is not
     /// gamma-encoded).
     pub fn present(&mut self, ctx: FrameCtx, target: &wgpu::TextureView) {
-        let FrameCtx { mut encoder, comp } = ctx;
-        self.record_comp(&mut encoder, &comp, target);
+        let FrameCtx {
+            mut encoder,
+            comp,
+            text,
+        } = ctx;
+        self.record_comp(&mut encoder, &comp, &text, target);
         // Title animation and user sprites (Milestone 6) go here.
         self.gpu.queue().submit([encoder.finish()]);
         self.swap_vs();
