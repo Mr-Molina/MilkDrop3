@@ -7,7 +7,7 @@
 use md_render::{
     build_custom_wave, custom_wave_inputs, gpu_or_skip, read_texture_level, CustomWaveDraw,
     CustomWaveFrame, CustomWavePoint, CustomWaveView, FrameInput, PerFrameVars, RenderSettings,
-    Renderer, RotParams, SoundData, Texture2d, Topo, Vertex,
+    Renderer, RotParams, SoundData, Texture2d, Topo,
 };
 
 fn frame() -> CustomWaveFrame {
@@ -40,10 +40,9 @@ fn close(a: f32, b: f32) -> bool {
 }
 
 #[test]
-fn samples_clamped_to_480_or_512() {
-    // F41: milkdropfs.cpp:2520 caps the samples at 512 for a spectrum and
-    // NUM_WAVEFORM_SAMPLES = 480 otherwise (the C++'s later `min(512)` at
-    // 2549 would let a waveform read 16 values before its array).
+fn samples_clamped_to_512_with_cpp_window() {
+    // milkdropfs.cpp:2548-2549: (int)samples capped at 512 for both kinds;
+    // the 480 of 2520 only sets the window (see the window test below).
     let s = sound();
     let n = |f: CustomWaveFrame| custom_wave_inputs(&f, &s).len();
     assert_eq!(
@@ -51,7 +50,7 @@ fn samples_clamped_to_480_or_512() {
             samples: 1000.0,
             ..frame()
         }),
-        480
+        512
     );
     assert_eq!(
         n(CustomWaveFrame {
@@ -67,6 +66,13 @@ fn samples_clamped_to_480_or_512() {
             ..frame()
         }),
         480
+    );
+    assert_eq!(
+        n(CustomWaveFrame {
+            samples: 512.0,
+            ..frame()
+        }),
+        512
     );
     assert_eq!(
         n(CustomWaveFrame {
@@ -114,6 +120,41 @@ fn samples_clamped_to_480_or_512() {
         }),
         0
     );
+}
+
+#[test]
+fn waveform_window_follows_the_cpp_with_zero_outside() {
+    // 2560-2561: j0 = (480 - n)/2 - sep/2, j1 = (480 - n)/2 + sep/2 in C
+    // integer division; indices outside 0..480 read 0 (valid data only).
+    let mut s = SoundData::default();
+    for i in 0..576 {
+        s.wave[0][i] = 1.0 + i as f32;
+        s.wave[1][i] = 1001.0 + i as f32;
+    }
+    let at = |ch: usize, i: i64| {
+        if (0..480).contains(&i) {
+            s.wave[ch][i as usize]
+        } else {
+            0.0
+        }
+    };
+    // (n, sep): n = 512 gives -16 - sep/2; n = 481 gives (-1)/2 = 0 in C.
+    for (n, sep) in [(512, 0), (512, 3), (512, 4), (481, 0), (481, 3), (480, 1)] {
+        let f = CustomWaveFrame {
+            samples: f64::from(n),
+            sep,
+            scaling: 250.0,
+            ..frame()
+        };
+        let v = custom_wave_inputs(&f, &s);
+        assert_eq!(v.len(), n as usize);
+        let base = (480 - n) / 2;
+        let (j0, j1) = (i64::from(base - sep / 2), i64::from(base + sep / 2));
+        for (j, p) in v.iter().enumerate() {
+            assert!(close(p.0, at(0, j as i64 + j0)), "n={n} sep={sep} j={j}");
+            assert!(close(p.1, at(1, j as i64 + j1)), "n={n} sep={sep} j={j}");
+        }
+    }
 }
 
 #[test]
@@ -342,7 +383,6 @@ fn positions_colours_and_alpha_follow_the_cpp() {
     out.clear();
     assert_eq!(build_custom_wave(&w, &view(), &mut out).copies, 0);
     assert!(out.is_empty());
-    let _: Option<Vertex> = out.first().copied();
 }
 
 // --- GPU ---

@@ -36,14 +36,14 @@ pub type CustomWaveInput = (f32, f32, f32);
 
 /// The smoothed, scaled source values of one custom wave.
 ///
-/// `n` samples are `(int)samples`, capped (F41) at 512 for a spectrum and
-/// `NUM_WAVEFORM_SAMPLES` (480) otherwise, `max_samples` of 2520. The C++
-/// caps the per-frame value at 512 only (2548-2549); a waveform of 481..512
-/// samples then reads before the start of `fWaveform` (`j0 < 0`), which is
-/// undefined there, so the cap of 2520 is applied to it. No samples are
-/// returned when `n < 2` (`n < 1` for dots, 2551). Reads that still fall
-/// outside the sound data (a large `sep`) see the two channels as one
-/// contiguous array, as `float[2][N]` is, and zero beyond it.
+/// `n` is `(int)samples` capped at 512 (2548-2549), as the C++ does after
+/// the per-frame program. `max_samples` (2520: 512 for a spectrum,
+/// `NUM_WAVEFORM_SAMPLES` = 480 otherwise) only sets the window `j0`/`j1`
+/// and the spectrum stride `t` (2560-2562), so a waveform of 481..=512
+/// samples has a window starting before the data. Any source index outside
+/// a channel's valid range (`0..480` waveform, `0..512` spectrum) reads
+/// 0.0, where the C++ reads whatever lies next to the array. No samples
+/// are returned when `n < 2` (`n < 1` for dots, 2551).
 ///
 /// The values are the forward-and-backward smoothed (2563-2578) source data
 /// times `mult` (2555, 2580-2584); `sample` is `j / (n - 1)` (2592-2595).
@@ -54,7 +54,7 @@ pub fn custom_wave_inputs(f: &CustomWaveFrame, sound: &SoundData) -> Vec<CustomW
     } else {
         NUM_WAVEFORM_SAMPLES as i32
     };
-    let n = c_int(f.samples).min(512).min(max_samples);
+    let n = c_int(f.samples).min(512);
     if !(n >= 2 || (f.use_dots && n >= 1)) {
         return Vec::new();
     }
@@ -77,9 +77,9 @@ pub fn custom_wave_inputs(f: &CustomWaveFrame, sound: &SoundData) -> Vec<CustomW
     let mix2 = 1.0 - mix1;
     let fetch = |ch: usize, idx: i64| {
         if f.spectrum {
-            fetch_flat(&sound.spectrum, ch, idx)
+            fetch_valid(&sound.spectrum, ch, idx, max_samples)
         } else {
-            fetch_flat(&sound.wave, ch, idx)
+            fetch_valid(&sound.wave, ch, idx, max_samples)
         }
     };
     let at = |j: usize| c_int(f64::from(j as f32 * t)) as i64;
@@ -102,12 +102,10 @@ pub fn custom_wave_inputs(f: &CustomWaveFrame, sound: &SoundData) -> Vec<CustomW
         .collect()
 }
 
-/// `data[ch][idx]` as C reads a `float[2][N]`: `idx` may run into the
-/// other channel; outside the whole array it reads 0.
-fn fetch_flat<const N: usize>(data: &[[f32; N]; 2], ch: usize, idx: i64) -> f32 {
-    let flat = (ch * N) as i64 + idx;
-    if (0..2 * N as i64).contains(&flat) {
-        data[flat as usize / N][flat as usize % N]
+/// `data[ch][idx]` for `idx` in `0..valid`, else 0.
+fn fetch_valid<const N: usize>(data: &[[f32; N]; 2], ch: usize, idx: i64, valid: i32) -> f32 {
+    if (0..i64::from(valid)).contains(&idx) {
+        data[ch][idx as usize]
     } else {
         0.0
     }
