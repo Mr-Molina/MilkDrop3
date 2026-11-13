@@ -10,6 +10,9 @@ use rand_pcg::Pcg32;
 
 use crate::history::{History, PRESET_HIST_LEN};
 use crate::library::PresetLibrary;
+use md_preset::PsVersion;
+
+const PS: PsVersion = PsVersion::Ps3_0;
 
 struct Tmp(PathBuf);
 
@@ -54,7 +57,7 @@ fn rated() -> (Tmp, PresetLibrary) {
     t.dir("sub");
     t.milk("hi.milk", 5.0);
     t.milk("lo.milk", 1.0);
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     (t, lib)
 }
 
@@ -66,7 +69,7 @@ fn dirs_sort_before_files_and_are_starred() {
     t.file("readme.txt", "x");
     t.dir("zeta");
     t.dir("alpha");
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     assert_eq!(names(&lib), ["*..", "*alpha", "*zeta", "A.milk", "b.milk"]);
     assert_eq!(lib.dir_count(), 3);
     assert!(lib.entries()[..3].iter().all(|e| e.is_dir));
@@ -81,7 +84,7 @@ fn sort_is_case_insensitive() {
     for n in ["B.milk", "a.milk", "C.milk", "_x.milk", "a b.milk"] {
         t.milk(n, 3.0);
     }
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     assert_eq!(
         names(&lib)[1..],
         ["_x.milk", "a.milk", "a b.milk", "B.milk", "C.milk"]
@@ -97,27 +100,23 @@ fn only_milk_extension_any_case_hidden_included() {
     t.file("a.milk.bak", "x");
     t.file("b.txt", "x");
     t.file("milk", "x");
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     assert_eq!(names(&lib)[1..], [".hidden.milk", ".milk", "up.MILK"]);
 }
 
 #[test]
 fn dotdot_only_when_not_at_root() {
     let t = Tmp::new();
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     assert_eq!(names(&lib), ["*.."]);
-    let root = PresetLibrary::scan(Path::new("/"), true);
+    let root = PresetLibrary::scan(Path::new("/"), PS);
     assert!(!names(&root).contains(&"*.."));
 }
 
 #[test]
 fn rating_cdf_prefers_high_ratings() {
-    // cum = [0 (..), 0 (sub), 5 (hi), 6 (lo)]. The weight is the rating, so
-    // the ideal ratio is 5:1; but the C++ draws `rand() % 14345` from a
-    // 15-bit rand(), and 32768 % 14345 = 4078 makes the low residues 3/2
-    // likelier. P(hi) = (3*4078 + 2*(11955-4078)) / 32768 = 0.8541, so the
-    // C++ ratio is 5.85:1 (computed analytically), not 5:1.
     let (_t, lib) = rated();
+    // cum = [0 (..), 0 (sub), 5 (hi), 6 (lo)]: weight is the rating, 5:1.
     let cum: Vec<f32> = lib.entries().iter().map(|e| e.rating_cum).collect();
     assert_eq!(cum, [0.0, 0.0, 5.0, 6.0]);
     let mut rng = Pcg32::seed_from_u64(7);
@@ -133,7 +132,7 @@ fn rating_cdf_prefers_high_ratings() {
         }
     }
     let ratio = f64::from(hi) / f64::from(lo);
-    assert!((5.3..6.4).contains(&ratio), "ratio {ratio} ({hi}:{lo})");
+    assert!((4.5..5.5).contains(&ratio), "ratio {ratio} ({hi}:{lo})");
 }
 
 #[test]
@@ -160,7 +159,7 @@ fn uniform_when_cumulative_rating_below_threshold() {
     t.dir("d");
     t.milk("a.milk", 0.05);
     t.milk("b.milk", 0.0);
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     let mut rng = Pcg32::seed_from_u64(3);
     let b = (0..2000)
         .filter(|_| lib.entries()[lib.pick_random(&mut rng, true).unwrap()].name == "b.milk")
@@ -172,7 +171,7 @@ fn uniform_when_cumulative_rating_below_threshold() {
 fn pick_random_none_without_files() {
     let t = Tmp::new();
     t.dir("d");
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     assert_eq!(lib.pick_random(&mut Pcg32::seed_from_u64(1), true), None);
 }
 
@@ -187,7 +186,7 @@ fn rating_read_default_clamp_and_position() {
         &format!("[preset00]\n{}fRating=4.5\n", "fX=1\n".repeat(2000)),
     );
     t.file("ci.milk", "[PRESET00]\nfrating = 2.5\n");
-    let lib = PresetLibrary::scan(&t.0, true);
+    let lib = PresetLibrary::scan(&t.0, PS);
     let r = |n: &str| lib.entries().iter().find(|e| e.name == n).unwrap().rating;
     assert_eq!(r("none.milk"), 3.0);
     assert_eq!(r("big.milk"), 5.0);
@@ -201,44 +200,84 @@ fn rating_read_default_clamp_and_position() {
 fn sequential_wraps_past_dirs() {
     let (_t, lib) = rated(); // [*.., *sub, hi, lo]
     assert_eq!(lib.dir_count(), 2);
-    assert_eq!(lib.next_sequential(2), 3);
+    assert_eq!(lib.next_sequential(Some(2)), Some(3));
     assert_eq!(
-        lib.next_sequential(3),
-        2,
+        lib.next_sequential(Some(3)),
+        Some(2),
         "wraps to the first file, past dirs"
     );
-    assert_eq!(lib.next_sequential(usize::MAX), 2, "no current preset (-1)");
-    assert_eq!(lib.prev_sequential(3), 2);
+    assert_eq!(lib.next_sequential(None), Some(2), "no current preset (-1)");
+    assert_eq!(lib.prev_sequential(Some(3)), Some(2));
     assert_eq!(
-        lib.prev_sequential(2),
-        3,
+        lib.prev_sequential(Some(2)),
+        Some(3),
         "before the first file wraps to the last"
     );
-    assert_eq!(lib.prev_sequential(usize::MAX), 3);
+    assert_eq!(lib.prev_sequential(None), Some(3));
 }
 
 #[test]
-fn read_more_ratings_progresses_n_per_call() {
+fn sequential_without_files_is_none() {
     let t = Tmp::new();
-    for (n, r) in [("a", 1.0), ("b", 2.0), ("c", 4.0), ("d", 5.0)] {
-        t.milk(&format!("{n}.milk"), r);
-    }
-    let mut lib = PresetLibrary::scan(&t.0, false);
-    assert!(lib.ratings_pending());
-    let read = |lib: &PresetLibrary| lib.entries().iter().map(|e| e.rating).collect::<Vec<_>>();
-    assert_eq!(read(&lib), [0.0; 5]);
-    lib.read_more_ratings(2);
-    assert_eq!(read(&lib), [0.0, 1.0, 2.0, 0.0, 0.0]);
-    let cum: Vec<f32> = lib.entries().iter().map(|e| e.rating_cum).collect();
-    assert_eq!(cum, [0.0, 1.0, 3.0, 3.0, 3.0]);
-    lib.read_more_ratings(1);
-    assert_eq!(read(&lib), [0.0, 1.0, 2.0, 4.0, 0.0]);
-    assert!(lib.ratings_pending());
-    lib.read_more_ratings(10);
-    assert_eq!(read(&lib), [0.0, 1.0, 2.0, 4.0, 5.0]);
-    assert!(!lib.ratings_pending());
-    lib.read_more_ratings(10); // no-op
-    assert_eq!(lib.entries()[4].rating_cum, 12.0);
+    let lib = PresetLibrary::scan(&t.0, PS);
+    assert_eq!(lib.next_sequential(None), None);
+    assert_eq!(lib.prev_sequential(Some(0)), None);
+}
+
+#[test]
+fn ps_version_cap_skips_presets_above_it() {
+    let t = Tmp::new();
+    let hdr = |v: &str| format!("MILKDROP_PRESET_VERSION=201\n{v}\n[preset00]\nfRating=3\n");
+    t.file("v0.milk", &hdr("PSVERSION=0"));
+    t.file("v2.milk", &hdr("PSVERSION=2"));
+    t.file("v3.milk", &hdr("PSVERSION=3"));
+    t.file("v4.milk", &hdr("PSVERSION=4"));
+    t.file("warp_line2.milk", &hdr("PSVERSION_WARP=4")); // unreadable number: 2
+    t.file(
+        "missing.milk",
+        "MILKDROP_PRESET_VERSION=201\n[preset00]\nfRating=3\n",
+    );
+    t.file("md1.milk", "[preset00]\nPSVERSION=9\nfRating=3\n"); // no header: runs
+    let list = |cap| {
+        let lib = PresetLibrary::scan(&t.0, cap);
+        names(&lib)[1..]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        list(PsVersion::Ps2_0),
+        [
+            "md1.milk",
+            "missing.milk",
+            "v0.milk",
+            "v2.milk",
+            "warp_line2.milk"
+        ]
+    );
+    assert_eq!(list(PsVersion::Ps2_X).len(), 6);
+    assert_eq!(list(PsVersion::Ps3_0).len(), 7);
+    assert_eq!(list(PsVersion::None).len(), 3 /* md1, missing, v0 */);
+}
+
+#[cfg(unix)]
+#[test]
+fn unopenable_milk_is_skipped() {
+    // A dangling symlink is listed by read_dir but cannot be opened (this
+    // also holds when the tests run as root, where mode 000 would not).
+    let t = Tmp::new();
+    t.milk("ok.milk", 3.0);
+    std::os::unix::fs::symlink(t.0.join("missing-target"), t.0.join("dangling.milk")).unwrap();
+    let lib = PresetLibrary::scan(&t.0, PS);
+    assert_eq!(names(&lib)[1..], ["ok.milk"]);
+}
+
+#[test]
+fn relative_dir_gets_dotdot_without_empty_path() {
+    // "." is relative: it is not a root, and its parent entry must not be "".
+    let lib = PresetLibrary::scan(Path::new("."), PS);
+    assert_eq!(lib.entries()[0].name, "*..");
+    assert_eq!(lib.path_of(0), Some(PathBuf::from("./..")));
 }
 
 #[test]
@@ -248,7 +287,7 @@ fn find_prefix_is_case_insensitive_and_skips_dirs() {
     for n in ["Apple.milk", "apricot.milk", "banana.milk"] {
         t.milk(n, 3.0);
     }
-    let lib = PresetLibrary::scan(&t.0, true); // [.., alpha, Apple, apricot, banana]
+    let lib = PresetLibrary::scan(&t.0, PS); // [.., alpha, Apple, apricot, banana]
     let at = |i: usize| lib.entries()[i].name.as_str();
     let i = lib.find_prefix("a", 0).unwrap();
     assert_eq!(at(i), "Apple.milk", "the directory *alpha is not a match");
