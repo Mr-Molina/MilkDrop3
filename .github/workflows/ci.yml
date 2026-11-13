@@ -61,5 +61,11 @@ jobs:
 
       # The renderer golden suite is #[ignore]d in the default run (about 270 s
       # on lavapipe, over the 180 s budget); run it explicitly.
+      # Linux only: the baselines were blessed on lavapipe, and MD_REQUIRE_GPU
+      # is set here too so the step cannot silently skip.
       - name: renderer golden suite
+        if: runner.os == 'Linux'
+        env:
+          MD_REQUIRE_GPU: "1"
+          WGPU_ADAPTER_NAME: llvmpipe
         run: cargo test -p milkdrop --test golden_suite -- --include-ignored

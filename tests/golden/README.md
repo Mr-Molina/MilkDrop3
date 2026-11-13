@@ -15,3 +15,8 @@ The suite takes about 270 s on lavapipe, so `cargo test --workspace` skips it
 
 CI has an explicit step for it. Bless missing or changed baselines with
 `MD_BLESS=1` on the same command, then view the images before committing.
+
+Bless only writes missing baselines and ones whose DSSIM exceeds the entry's
+`max_dssim`; it does not rewrite drift within the threshold. For a deliberate
+small change, delete the PNG (or set `max_dssim = 0`) before blessing. A failing
+run writes `frame_<n>.diff.png` beside the baseline (git-ignored).
