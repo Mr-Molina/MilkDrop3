@@ -29,7 +29,7 @@ use crate::noise::{
 use crate::texcache::{fold, TexCache, TextureId, TEXTURE_OVERHEAD_BYTES};
 use crate::texture::{Texture2d, Texture3d};
 use rand_core::{Rng, SeedableRng};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// File extensions tried, in order (`texture_exts`, plugin.cpp:2847 —
@@ -132,6 +132,10 @@ pub fn pick_random_texture<R: Rng + ?Sized>(
 /// cache so the eviction budget never touches them.
 const SPRITE_ID_BASE: u32 = 1 << 31;
 
+/// The first id of sprite slots (one per `load_sprite`), which map to a
+/// shared texture of the sprite cache.
+const INSTANCE_ID_BASE: u32 = 3 << 30;
+
 /// A noise texture of the store.
 struct Noise<T> {
     name: &'static str,
@@ -144,6 +148,9 @@ pub struct TextureStore {
     cache: TexCache<Texture2d>,
     sprites: TexCache<Texture2d>,
     warned_sprites: HashSet<String>,
+    sprite_instances: HashMap<u32, TextureId>,
+    /// Kills so far, so instance ids are never reused.
+    killed: u32,
     textures_dir: Option<PathBuf>,
     preset_dir: Option<PathBuf>,
     random_names: Vec<String>,
@@ -182,6 +189,8 @@ impl TextureStore {
             cache: TexCache::new(),
             sprites: TexCache::starting_at(SPRITE_ID_BASE),
             warned_sprites: HashSet::new(),
+            sprite_instances: HashMap::new(),
+            killed: 0,
             textures_dir: None,
             preset_dir: None,
             random_names: Vec::new(),
@@ -274,9 +283,10 @@ impl TextureStore {
     ///
     /// Sprite textures live outside the eviction budget (the C++ keeps them
     /// in `texmgr`, not the texture cache) until [`TextureStore::kill_sprite`].
-    /// A path already loaded (compared case-insensitively) returns the
-    /// existing texture with its original colour key, as `LoadTex` instances
-    /// an already-loaded file (texmgr.cpp:76-87).
+    /// A path already loaded (compared case-insensitively) gets a new slot
+    /// sharing the existing texture and its original colour key, as `LoadTex`
+    /// instances an already-loaded file (texmgr.cpp:76-87); each call returns
+    /// its own handle, like a slot index.
     ///
     /// On failure no sprite exists: the C++ shows an error and `LaunchSprite`
     /// returns false (plugin.cpp:8667-8712), and `DrawUserSprites` skips
@@ -289,8 +299,8 @@ impl TextureStore {
         colorkey: u32,
     ) -> Result<TextureId, TextureError> {
         let name = path.to_string_lossy();
-        if let Some(id) = self.sprites.lookup(&name) {
-            return Ok(id);
+        if let Some(shared) = self.sprites.lookup(&name) {
+            return Ok(self.new_instance(shared));
         }
         let max = gpu.device().limits().max_texture_dimension_2d;
         let loaded = match load_image(path) {
@@ -317,18 +327,38 @@ impl TextureStore {
         let (w, h) = img.dimensions();
         let tex = Texture2d::from_rgba8(gpu, w, h, img.as_raw(), true);
         let bytes = u64::from(w) * u64::from(h) * 4 + TEXTURE_OVERHEAD_BYTES;
-        Ok(self.sprites.insert(&name, tex, bytes))
+        let shared = self.sprites.insert(&name, tex, bytes);
+        Ok(self.new_instance(shared))
     }
 
-    /// `KillTex`: drop the sprite texture `id` (its handle goes stale, and
-    /// a later [`TextureStore::load_sprite`] of the path decodes again).
+    /// A new sprite slot sharing the texture `shared`.
+    fn new_instance(&mut self, shared: TextureId) -> TextureId {
+        let id = TextureId(INSTANCE_ID_BASE + self.sprite_instances.len() as u32 + self.killed);
+        self.sprite_instances.insert(id.0, shared);
+        id
+    }
+
+    /// `KillTex` (texmgr.cpp:151-172): free the sprite slot `id`; its
+    /// handle goes stale (a second kill of it does nothing, as a slot
+    /// without a surface does nothing). The texture itself is released
+    /// only when no other slot still uses it (the C++ ref count, 158-168),
+    /// after which a [`TextureStore::load_sprite`] of the path decodes again.
     pub fn kill_sprite(&mut self, id: TextureId) {
-        self.sprites.remove(id);
+        let Some(shared) = self.sprite_instances.remove(&id.0) else {
+            return;
+        };
+        self.killed += 1;
+        if !self.sprite_instances.values().any(|&s| s == shared) {
+            self.sprites.remove(shared);
+        }
     }
 
     /// A texture by handle; `None` once evicted (or killed, for a sprite).
     pub fn texture(&self, id: TextureId) -> Option<&Texture2d> {
-        if id.0 >= SPRITE_ID_BASE {
+        if id.0 >= INSTANCE_ID_BASE {
+            let shared = self.sprite_instances.get(&id.0)?;
+            self.sprites.get(*shared)
+        } else if id.0 >= SPRITE_ID_BASE {
             self.sprites.get(id)
         } else {
             self.cache.get(id)

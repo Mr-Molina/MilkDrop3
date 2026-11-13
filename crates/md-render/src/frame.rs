@@ -447,7 +447,8 @@ impl Renderer {
         self.record_comp(
             &mut encoder,
             &comp,
-            (&title, &sprites),
+            &title,
+            &sprites,
             (&text_under, &text),
             target,
         );

@@ -348,10 +348,8 @@ impl Renderer {
         &mut self,
         enc: &mut wgpu::CommandEncoder,
         frame: &CompFrame,
-        over: (
-            &[crate::title::TitleDraw],
-            &[crate::sprites_draw::SpriteDraw],
-        ),
+        title: &[crate::title::TitleDraw],
+        sprites: &[crate::sprites_draw::SpriteDraw],
         text: (&[crate::text_draw::TextDraw], &[crate::text_draw::TextDraw]),
         target: &wgpu::TextureView,
     ) {
@@ -412,8 +410,8 @@ impl Renderer {
             Some((CompPass::Shader { .. }, _)) => SamplerKind::LinearWrap,
             _ => frame.fixed_sampler,
         };
-        Renderer::record_title(&mut batch, over.0, format);
-        Renderer::record_sprites(&mut batch, over.1, format, sprite_sampler);
+        Renderer::record_title(&mut batch, title, format);
+        Renderer::record_sprites(&mut batch, sprites, format, sprite_sampler);
         Renderer::record_text(&mut batch, text.0, text.1, format);
         batch.finish();
         // Burnt sprites go into the warp target after the composite read it.
@@ -421,7 +419,7 @@ impl Renderer {
             (&self.gpu, &mut self.pipelines, &mut self.dynbuf),
             &self.vs[main],
             enc,
-            over.1,
+            sprites,
             sprite_sampler,
         );
 

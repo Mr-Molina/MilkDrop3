@@ -402,3 +402,144 @@ fn sprites_draw_over_the_title_and_under_the_text() {
     assert!(text_px > 10, "text drawn over the sprite: {text_px}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn killing_one_copy_of_a_shared_texture_keeps_the_others() {
+    let Some(gpu) = gpu_or_skip("killing_one_copy_of_a_shared_texture_keeps_the_others") else {
+        return;
+    };
+    let dir = temp_dir("shared");
+    let path = save(&dir, "red.png", &solid(8, 8, RED));
+    let mut r = renderer(&gpu);
+    // Two sprites from one file (LoadTex instances it, texmgr.cpp:76-87):
+    // two slots, one texture.
+    let a = load(&gpu, &mut r, &path, 0x00ff_00ff);
+    let b = load(&gpu, &mut r, &path, 0x00ff_00ff);
+    assert_ne!(a, b, "each launch has its own slot");
+    let drawn = |r: &mut Renderer, id| {
+        let s = sprite(id, |v| (v.sx, v.sy, v.burn) = (0.2, 0.2, 0.0));
+        let mut n = 0;
+        frame(r, 0.0, |r, ctx| n = r.draw_sprites(ctx, &[s]));
+        n
+    };
+    assert_eq!((drawn(&mut r, a), drawn(&mut r, b)), (1, 1));
+    // KillTex frees the texture only when no other slot uses it
+    // (texmgr.cpp:158-168).
+    r.textures_mut().kill_sprite(a);
+    assert_eq!((drawn(&mut r, a), drawn(&mut r, b)), (0, 1));
+    // Killing a dead slot again does nothing (a slot without a surface
+    // the body is guarded by `if (pSurface)`, texmgr.cpp:157), so b survives it.
+    r.textures_mut().kill_sprite(a);
+    r.textures_mut().kill_sprite(a);
+    assert_eq!(drawn(&mut r, b), 1);
+    r.textures_mut().kill_sprite(b);
+    assert_eq!(drawn(&mut r, b), 0);
+    // The texture is gone: loading the path again works from scratch.
+    let c = load(&gpu, &mut r, &path, 0x00ff_00ff);
+    assert_eq!(drawn(&mut r, c), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn sprite_image_is_drawn_upright() {
+    let Some(gpu) = gpu_or_skip("sprite_image_is_drawn_upright") else {
+        return;
+    };
+    let dir = temp_dir("upright");
+    let mut img = solid(8, 8, [0, 0, 255, 255]);
+    for y in 0..4 {
+        for x in 0..8 {
+            img.put_pixel(x, y, Rgba(RED));
+        }
+    }
+    let path = save(&dir, "rb.png", &img);
+    let mut r = renderer(&gpu);
+    let id = load(&gpu, &mut r, &path, 0x00ff_00ff);
+    // Top half red, bottom half blue in the file: red on top on screen
+    // (v = 0 at the top vertices, whose y is -sy before the projection
+    // flip, mfs:3559-3566, 3621-3633).
+    let s = sprite(id, |v| (v.sx, v.sy, v.burn) = (0.3, 0.3, 0.0));
+    let out = frame(&mut r, 0.0, |r, ctx| {
+        r.draw_sprites(ctx, &[s]);
+    });
+    let blue = |p: [u8; 4]| p[2] > 150 && p[0] < 60;
+    let (red_rows, _) = extent(&out, is_red);
+    let (blue_rows, _) = extent(&out, blue);
+    assert!(!red_rows.is_empty() && !blue_rows.is_empty());
+    assert!(
+        mean(&red_rows) < mean(&blue_rows) - 4.0,
+        "{} vs {}",
+        mean(&red_rows),
+        mean(&blue_rows)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A grey backdrop sprite (decal, full screen), then `mode` over it with a
+/// texture of `tex`, `a = 0.5`, white tint; the centre pixel.
+fn blend_over_grey(gpu: &Gpu, mode: f64, tex: [u8; 4]) -> [u8; 4] {
+    let dir = temp_dir(&format!("blend{mode}"));
+    let grey = save(&dir, "grey.png", &solid(8, 8, [100, 100, 100, 255]));
+    let top = save(&dir, "top.png", &solid(8, 8, tex));
+    let mut r = renderer(gpu);
+    let g = load(gpu, &mut r, &grey, 0x00ff_00ff);
+    let t = load(gpu, &mut r, &top, 0x00ff_00ff);
+    let back = sprite(g, |v| {
+        (v.sx, v.sy, v.blendmode, v.burn) = (2.0, 2.0, 1.0, 0.0)
+    });
+    let over = sprite(t, |v| {
+        (v.sx, v.sy, v.blendmode, v.a, v.burn) = (0.2, 0.2, mode, 0.5, 0.0)
+    });
+    let out = frame(&mut r, 0.0, |r, ctx| {
+        assert_eq!(r.draw_sprites(ctx, &[back, over]), 2);
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(px(&out, 5, 5), [100, 100, 100, 255], "decal backdrop");
+    px(&out, W / 2, H / 2)
+}
+
+fn close(got: [u8; 4], want: [u8; 3]) {
+    for c in 0..3 {
+        assert!(
+            (i32::from(got[c]) - i32::from(want[c])).abs() <= 3,
+            "{got:?} vs {want:?}"
+        );
+    }
+}
+
+#[test]
+fn blend_mode_2_adds_the_modulated_texture() {
+    let Some(gpu) = gpu_or_skip("blend_mode_2_adds_the_modulated_texture") else {
+        return;
+    };
+    // tex * (r*a, g*a, b*a) + dst = (50, 100, 25) + 100.
+    close(
+        blend_over_grey(&gpu, 2.0, [100, 200, 50, 255]),
+        [150, 200, 125],
+    );
+}
+
+#[test]
+fn blend_mode_3_is_src_color_inv_src_color() {
+    let Some(gpu) = gpu_or_skip("blend_mode_3_is_src_color_inv_src_color") else {
+        return;
+    };
+    // s = tex (white tint, `a` has no effect): s*s + dst*(1-s) per channel.
+    close(
+        blend_over_grey(&gpu, 3.0, [100, 200, 50, 255]),
+        [100, 179, 90],
+    );
+}
+
+#[test]
+fn blend_mode_4_modulates_texture_alpha() {
+    let Some(gpu) = gpu_or_skip("blend_mode_4_modulates_texture_alpha") else {
+        return;
+    };
+    // alpha = tex.a * a = 128/255 * 0.5 = 0.251; mode 0 would use a alone
+    // (0.5) and give g = 150.
+    let tex = [100, 200, 50, 128];
+    close(blend_over_grey(&gpu, 4.0, tex), [100, 125, 88]);
+    let m0 = blend_over_grey(&gpu, 0.0, tex);
+    close(m0, [100, 150, 75]);
+}
