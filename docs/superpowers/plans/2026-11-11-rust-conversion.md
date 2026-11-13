@@ -1020,11 +1020,11 @@ Pinned behavior from `plugin.cpp` and `milkdropfs.cpp`:
 **Interfaces:**
 - Produces: `pub struct Switcher { current: PresetState, old: Option<PresetState>, pending: Option<(PresetState, f32 /* blend */, u8 /* tick */)>, blend_pattern: Vec<VertInfo>, next_preset_time: f32, hard_cut_thresh: f32, locked_by_user: bool, locked_by_code: bool }` with `load(&mut self, path, blend_time, now)`, `tick(&mut self, now, renderer: &mut Renderer)` (implements the 8-tick schedule and the shader compiles at ticks 2 and 5 through `Renderer::load_preset`), `update_timers(&mut self, now, fps, sound, cfg) -> Vec<SwitchEvent>` (auto-advance, hard cut), `blend_t(now) -> f32`, `progress(now) -> f32`.
 
-- [ ] **Step 1:** Write failing tests `auto_advance_after_interval` (fixed clock, no audio), `hard_cut_triggers_and_doubles_threshold`, `threshold_decays_toward_loudness_thresh`, `load_during_pending_is_ignored`, `tick_8_swaps_and_starts_blend`, `locked_preset_never_advances`.
-- [ ] **Step 2:** Run the tests. Expected: FAIL.
-- [ ] **Step 3:** Implement.
-- [ ] **Step 4:** Run the tests. Expected: PASS.
-- [ ] **Step 5:** Commit: `feat(core): preset switching, blending, hard cuts`
+- [x] **Step 1:** Write failing tests `auto_advance_after_interval` (fixed clock, no audio), `hard_cut_triggers_and_doubles_threshold`, `threshold_decays_toward_loudness_thresh`, `load_during_pending_is_ignored`, `tick_8_swaps_and_starts_blend`, `locked_preset_never_advances`.
+- [x] **Step 2:** Run the tests. Expected: FAIL.
+- [x] **Step 3:** Implement.
+- [x] **Step 4:** Run the tests. Expected: PASS.
+- [x] **Step 5:** Commit: `feat(core): preset switching, blending, hard cuts`
 
 ### Task 7.6: Commands and key bindings
 
