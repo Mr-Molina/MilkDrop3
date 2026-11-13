@@ -417,8 +417,6 @@ impl Renderer {
             &preset.comp_shader,
             preset.comp_ps_version(),
         );
-        // m_nPresetsLoadedTotal++: protects this preset's textures.
-        self.textures.preset_loaded();
         Ok(PresetGpu {
             warp: warp?,
             comp: comp?,

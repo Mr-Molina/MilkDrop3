@@ -9,6 +9,8 @@ pub mod per_frame;
 pub mod per_pixel;
 pub mod shapes;
 pub mod state;
+pub mod switcher;
+pub mod timing;
 pub mod vars;
 pub mod waves;
 
@@ -20,6 +22,8 @@ mod library_tests;
 mod per_frame_tests;
 #[cfg(test)]
 mod state_tests;
+#[cfg(test)]
+mod switcher_tests;
 
 pub use custom::{ShapeState, WaveState};
 pub use error::{CoreError, ProgramError};
@@ -29,4 +33,6 @@ pub use per_frame::{blend_outputs, run_per_frame, FrameInputs};
 pub use per_pixel::per_pixel_runner;
 pub use shapes::eval_custom_shapes;
 pub use state::{InitInputs, InitMode, PresetState};
+pub use switcher::{ShaderLoader, Switcher};
+pub use timing::{SwitchConfig, SwitchEvent, TimerFrame, Timers};
 pub use waves::eval_custom_waves;
