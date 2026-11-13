@@ -13,7 +13,7 @@ MILKDROP_EXE="MilkDrop 3.exe"
 # Check if MilkDrop3 is installed
 if [ ! -d "$MILKDROP_DIR" ]; then
     echo "ERROR: MilkDrop3 not found at: $MILKDROP_DIR"
-    echo "Please run the installer first. See LINUX_SETUP_GUIDE.md for instructions."
+    echo "Please run the installer first. See linux/README.md for instructions."
     exit 1
 fi
 

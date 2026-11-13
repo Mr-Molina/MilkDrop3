@@ -1,2 +1,8 @@
 /target/
 /.superpowers/
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
+Thumbs.db

@@ -27,7 +27,7 @@ IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISI
 OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "DXContext.h"
+#include "dxcontext.h"
 #include "utility.h"
 #include "shell_defines.h"
 #include <strsafe.h>
