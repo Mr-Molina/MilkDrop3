@@ -11,4 +11,4 @@ mod state_tests;
 
 pub use custom::{ShapeState, WaveState};
 pub use error::{CoreError, ProgramError};
-pub use state::{InitInputs, PresetState};
+pub use state::{InitInputs, InitMode, PresetState};

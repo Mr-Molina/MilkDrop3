@@ -3,7 +3,7 @@
 use crate::vars::{
     per_frame_names, per_pixel_names, shape_frame_names, wave_frame_names, wave_point_names,
 };
-use crate::{InitInputs, PresetState};
+use crate::{InitInputs, InitMode, PresetState};
 use md_eval::{GlobalMem, Vm};
 use md_preset::Preset;
 use rand_core::SeedableRng;
@@ -107,22 +107,44 @@ fn init_user_variables_and_registers_persist() {
     assert_eq!(g.borrow().regs[5], 42.0);
 }
 
-#[test]
-fn init_sees_the_preset_values_and_inputs() {
+fn load_mode(p: Preset, mode: &InitMode) -> PresetState {
+    PresetState::from_preset_with(p, global(), &mut Pcg32::seed_from_u64(1), mode).unwrap()
+}
+
+fn reading_preset() -> Preset {
     let mut p = Preset::defaults();
     p.per_frame_init = "q1 = time + meshx; q2 = decay; q3 = bass;".into();
+    p.waves[1].init = "t1 = q1; t2 = r; t3 = time;".into();
+    p.waves[1].r = 0.5;
+    p.shapes[2].sides = 7;
+    p.shapes[2].init = "t1 = sides; t2 = q2; t3 = bass;".into();
+    p
+}
+
+#[test]
+fn instant_init_sees_the_preset_values_and_inputs() {
+    let p = reading_preset();
+    let decay = f64::from(p.decay.eval(0.0));
     let inputs = InitInputs {
         time: 2.5,
         meshx: 64.0,
         imm_rel: [1.5, 0.0, 0.0],
         ..InitInputs::default()
     };
-    let decay = f64::from(p.decay.eval(0.0));
-    let s =
-        PresetState::from_preset_with(p, global(), &mut Pcg32::seed_from_u64(1), &inputs).unwrap();
-    assert_eq!(s.q_init[0], 66.5);
-    assert_eq!(s.q_init[1], decay);
-    assert_eq!(s.q_init[2], 1.5);
+    let s = load_mode(p, &InitMode::Instant(inputs));
+    assert_eq!(s.q_init[..3], [66.5, decay, 1.5]);
+    assert_eq!(s.waves[1].t_init[..3], [66.5, 0.5, 2.5]);
+    assert_eq!(s.shapes[2].t_init[..3], [7.0, decay, 1.5]);
+}
+
+#[test]
+fn blended_init_sees_nothing_loaded() {
+    let s = load_mode(reading_preset(), &InitMode::Blended);
+    assert_eq!(s.q_init[..3], [0.0; 3]);
+    assert_eq!(s.waves[1].t_init[..3], [0.0; 3]);
+    assert_eq!(s.shapes[2].t_init[..3], [0.0; 3]);
+    // The decay really is non-zero, so the zeros are the mode, not the preset.
+    assert!(reading_preset().decay.eval(0.0) > 0.0);
 }
 
 #[test]

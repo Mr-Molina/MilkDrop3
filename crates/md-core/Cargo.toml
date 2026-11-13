@@ -12,6 +12,8 @@ workspace = true
 md-eval = { path = "../md-eval" }
 md-preset = { path = "../md-preset" }
 md-render = { path = "../md-render" }
-rand_pcg.workspace = true
 rand_core.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+rand_pcg.workspace = true

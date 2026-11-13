@@ -38,6 +38,25 @@ pub struct InitInputs {
     pub aspecty: f64,
 }
 
+/// How the preset is being loaded; it decides what the init code sees
+/// (`LoadPerFrameEvallibVars(g_plugin.m_pState)`, state.cpp:1684, and the
+/// wave/shape twins at 1750 and 1821, write into `m_pState`'s variables).
+#[derive(Clone, Debug, PartialEq)]
+pub enum InitMode {
+    /// Blend time 0 (first preset, hard cuts): the states are swapped
+    /// before `Import` (plugin.cpp:7251-7259), so `m_pState` is the
+    /// incoming preset and its init code sees its own values plus the live
+    /// inputs. The caller supplies `progress` from the OUTGOING preset's
+    /// timers, which are reset only after `Import` (plugin.cpp:7259, 7267).
+    Instant(InitInputs),
+    /// Blended load: `Import` runs into `m_pNewState` while `m_pState` is
+    /// still the outgoing state (plugin.cpp:7293), so the loaders write to
+    /// the outgoing state and the incoming init code runs over freshly reset
+    /// variables: preset, wave and shape init see everything as 0 and the
+    /// wave/shape init get `q` = 0.
+    Blended,
+}
+
 /// Compile `src` (already comment-stripped) into `vm`. Empty source gives
 /// `None` silently (`if (buf[0])`, state.cpp:1666 and 1699); a compile error gives
 /// `None` and a [`ProgramError`] for `section`.
@@ -93,13 +112,19 @@ pub struct PresetState {
 }
 
 impl PresetState {
-    /// [`PresetState::from_preset_with`] with all plugin inputs 0.
+    /// [`PresetState::from_preset_with`] as an instant load with all
+    /// plugin inputs 0.
     pub fn from_preset(
         preset: Preset,
         global: Rc<RefCell<GlobalMem>>,
         rng: &mut impl Rng,
     ) -> Result<PresetState, CoreError> {
-        Self::from_preset_with(preset, global, rng, &InitInputs::default())
+        Self::from_preset_with(
+            preset,
+            global,
+            rng,
+            &InitMode::Instant(InitInputs::default()),
+        )
     }
 
     /// Draw the per-preset random values (`Default` ->
@@ -109,18 +134,20 @@ impl PresetState {
     /// `per_frame_init`, per-frame, per-pixel; then each wave's and each
     /// shape's init, per-frame and (waves) per-point code.
     ///
-    /// Deviation from the C++, which calls `LoadPerFrameEvallibVars(
-    /// g_plugin.m_pState)` (state.cpp:1684) and so loads the *current*
-    /// preset's values when the state being compiled is the incoming one
-    /// of a progressive load: here the init code sees this preset's own.
-    /// `q_values_after_init_code` is uninitialised in the C++ when there is
-    /// no init code; here it is 0.
+    /// What the init code sees depends on `mode` (see [`InitMode`]).
+    /// `q`/`monitor` with no init code are 0 on purpose: the C++ holds the
+    /// stale `q_values_after_init_code` of whatever preset the reused
+    /// `CState` slot held before (state.h:440-441, never reset).
     pub fn from_preset_with(
         preset: Preset,
         global: Rc<RefCell<GlobalMem>>,
         rng: &mut impl Rng,
-        inputs: &InitInputs,
+        mode: &InitMode,
     ) -> Result<PresetState, CoreError> {
+        let loaded = match mode {
+            InitMode::Instant(i) => Some(i),
+            InitMode::Blended => None,
+        };
         let (rand_preset, rot) = randomize_preset_vars(rng);
         let mut errors = Vec::new();
 
@@ -133,24 +160,26 @@ impl PresetState {
         let mut monitor_init = 0.0;
         let init = preset.per_frame_init_eel();
         if let Some(prog) = compile_section(&mut pf, &init, "per_frame_init", &mut errors) {
-            let mut v = PerFrameVars::from_preset(&preset, inputs.now);
-            v.time = inputs.time;
-            v.fps = inputs.fps;
-            v.frame = inputs.frame;
-            v.progress = inputs.progress;
-            v.bass = inputs.imm_rel[0];
-            v.mid = inputs.imm_rel[1];
-            v.treb = inputs.imm_rel[2];
-            v.bass_att = inputs.avg_rel[0];
-            v.mid_att = inputs.avg_rel[1];
-            v.treb_att = inputs.avg_rel[2];
-            v.meshx = inputs.meshx;
-            v.meshy = inputs.meshy;
-            v.pixelsx = inputs.pixelsx;
-            v.pixelsy = inputs.pixelsy;
-            v.aspectx = inputs.aspectx;
-            v.aspecty = inputs.aspecty;
-            pf_refs.load(&mut pf, &v);
+            if let Some(inputs) = loaded {
+                let mut v = PerFrameVars::from_preset(&preset, inputs.now);
+                v.time = inputs.time;
+                v.fps = inputs.fps;
+                v.frame = inputs.frame;
+                v.progress = inputs.progress;
+                v.bass = inputs.imm_rel[0];
+                v.mid = inputs.imm_rel[1];
+                v.treb = inputs.imm_rel[2];
+                v.bass_att = inputs.avg_rel[0];
+                v.mid_att = inputs.avg_rel[1];
+                v.treb_att = inputs.avg_rel[2];
+                v.meshx = inputs.meshx;
+                v.meshy = inputs.meshy;
+                v.pixelsx = inputs.pixelsx;
+                v.pixelsy = inputs.pixelsy;
+                v.aspectx = inputs.aspectx;
+                v.aspecty = inputs.aspecty;
+                pf_refs.load(&mut pf, &v);
+            }
             prog.run(&mut pf);
             for (x, r) in q_init.iter_mut().zip(&pf_refs.q) {
                 *x = pf.get(*r);
@@ -163,10 +192,10 @@ impl PresetState {
             compile_section(&mut pv, &preset.per_pixel_eel(), "per_pixel", &mut errors);
 
         let waves = std::array::from_fn(|i| {
-            WaveState::load(i, &preset.waves[i], &global, &q_init, inputs, &mut errors)
+            WaveState::load(i, &preset.waves[i], &global, &q_init, loaded, &mut errors)
         });
         let shapes = std::array::from_fn(|i| {
-            ShapeState::load(i, &preset.shapes[i], &global, &q_init, inputs, &mut errors)
+            ShapeState::load(i, &preset.shapes[i], &global, &q_init, loaded, &mut errors)
         });
 
         Ok(PresetState {
