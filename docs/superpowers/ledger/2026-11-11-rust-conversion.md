@@ -366,3 +366,4 @@ Task 6.4: minor (deferred): dead `let _: Option<Vertex>` import-keeping line in 
 Task 6.4: fix round 1/5 dispatched (Important: re-ruled sample cap).
 Task 6.4: fix round 1/5 (2 addressed, 0 open — sample count min(512, c_int(samples)) with the C++ j0/j1 window and zero outside valid range; dead test line removed; commits b142859..dbf81f8)
 Task 6.4: complete (commits ad1572c..a875ab3 + fix dbf81f8, review clean after 1 fix round; controller gate: 629 passed, fmt/clippy/deny/native OK)
+Task 6.5: dispatched (BASE a0feddd) — binding: F38 (MotionVectorVars/Border in md-render, values from FrameInput vars), Task 5.7 darken_center ruling (DrawSprites into main), citation note
