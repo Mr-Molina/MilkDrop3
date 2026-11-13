@@ -1,0 +1,34 @@
+### Spec Compliance
+✅ (a) Title texture `max(tex_w,tex_h)` × `/4`: plugin.cpp:2177-2178 (`m_nTitleTexSizeX = max(...)`, `Y = X/4`); title.rs `title_size`. Device clamp in place of the 2192-2208 retry loop is fine (the C++ loop doubles Y first; unreachable on wgpu).
+✅ (b) 16×8 mesh: `v3[128]` (mfs:4496), loops y<8, x<16 (4533-4545), indices 7×15×6 (4636-4649); title_mesh.rs `GRID_X/GRID_Y`, `indices()`. The brief's "32x8" was wrong.
+✅ (c) Font px `nSize * m_nTitleTexSizeX / 256`, min 6 (plugin.cpp:2228-2229), always ANTIALIASED_QUALITY (:2247); `title_font_px` (int arithmetic via c_int, same result for non-negative inputs).
+✅ (d) No seed. `ShowSongTitleAnim` (mfs:4477-4713) and `LaunchSongTitleAnim` (plugin.cpp:8546-8565) call no rand(); the wobble is sin(GetTime()*k + ...) (4555-4560). The only rand() on the supertext path is LaunchCustomMessage's fX/fY/colour jitter (plugin.cpp:8497-8498, 8515-8517), stored in m_supertext before the draw: 7.8's caller RNG, not a draw-time seed. `draw_title_anim(ctx, progress, now)` is correct.
+✅ (e) Drawn twice: burn-in `ShowSongTitleAnim(m_nTexSizeX, m_nTexSizeY, 1.0)` after DrawSprites when `fStartTime>=0 && fProgress>=1` (mfs:1057-1067); screen draw after the composite with `min(p,0.9999)` and off after (1122-1129); text after (DrawNow, pluginshell). Matches preflight ruling (F64 order). frame.rs/title.rs/comp.rs order verified.
+✅ (f) y flip: support.cpp:179 `D3DXMatrixOrthoLH(2,-2)` gives clip.y = -y; plugin.cpp:3974-3982's comment "Y=-1 top, Y=1 bottom". Title vertices `-y` are correct, as are warp.rs (C++ negates, ortho negates back) and comp_fixed.rs:136 (`-(y*mult)`). See cross-task escalation below: shapes/waves/custom waves/motion vectors do NOT apply it, and they are the ones that are wrong, not the title.
+✅ (g) Custom-message fitting (mfs:315-397, `g_title_font_sizes` mfs:45) deferred to 7.8: acceptable scope (brief names song titles only); needs a ledger note (Minor #3).
+✅ Colour ramp `t = p^0.3` song / CosineInterp(min(1,p/fade)) custom (4660-4676); pass 0 `(t,t,t,t)`, pass 1 `t*rgb/255, t`; cumulative nudges +2 then -4 title px (4678-4695); blends ZERO/INVSRCCOLOR then ONE/ONE (4698-4706); `y *= m_fInvAspectY` (4656) with mesh_aspect = plugin.cpp:2036-2038; burn-in 1/m_nTexSizeY nudge (4541-4542); scale 1.01/(p^0.21+0.01) (4564-4569); size clamp 0.88 (4502-4509). All literal.
+✅ Active range: nothing while start_time<0; screen draw every active frame; burn-in only on the finishing frame; redraw at frame start (mfs:942-947), failure turns it off. RenderStringToTitleTexture song branch (399-448): opaque-black clear (268-286), CALCRECT in 1/21..17/21 band (309-313, 416), 91% cut + "..." when len>8 (417-436), centred on Y/2 with h from CALCRECT (439-447), nFontSizeUsed = drawn height; no DT_NOPREFIX → `&` processed (TextFlags default no_prefix=false).
+✅ Ledger: songtitle slot (F43) via `set_title_font`; 6.6 glyph code reused (`glyph_vertices`, `sync_atlas` made pub(crate), not forked); no mip regeneration on main; c_int for `(int)`; half-pixel shift via DrawBatch's per-target VsParams; inactive path draws nothing (golden untouched in diff).
+✅ GPU test `title_anim_at_progress_half_is_visible` present (tests/title.rs), plus coverage, range, determinism, upright tests.
+✅ Citations spot-checked with sed (≈60 lines): all correct to within a line (e.g. "positioning 4499-4511" is 4501-4509; "307-313" band starts 309).
+⚠️ Sampler: C++ inherits LINEAR/WRAP after RestoreShaderParams (mfs:3802-3807) before the screen draw; LinearClamp differs only at u=0/1 columns, which are black for a centred title. Not verifiable against D3D9 output; accept.
+
+### Strengths
+- Every brief error resolved to the C++ with correct citations; pure geometry (title_mesh.rs) split from GPU (title.rs) and unit-tested (final pose, nudges, ramp, wobble-vs-clock, custom branch).
+- Upright test (`title_is_upright_on_screen_and_burnt_into_main`) pins the projection convention for both draw paths.
+
+### Issues
+#### Critical
+None.
+#### Important
+None in 6.7. CROSS-TASK ESCALATION (not 6.7's defect): shapes.rs:103 (`v.y*-2+1`, = C++ mfs:2300 vertex), custom_waves.rs (mfs:2613 vertex), wave.rs:500-502 (C++ negation 3229 only) and overlays.rs (motion vectors, mfs:1286 `fy*2-1`, "no flip") emit the C++ vertex y straight to clip, omitting PrepareFor2DDrawing's ortho flip that warp.rs, comp_fixed.rs:136 and now title_mesh.rs apply. The fixed shaders do not flip (fixed_tex_modulate.wgsl `vs_main`). Net: a shape/custom wave/wave at preset y=0.75 lands in the lower half of the main texture, and the comp shows row 0 at the top as the C++ does, so these are vertically mirrored vs MilkDrop (mv offsets/direction too; borders and darken_center are symmetric). No existing test pins off-centre orientation (tests/shapes.rs, tests/wave.rs:326 symmetric). Needs a controller ruling and a fix task for 6.2-6.5 (negate y on emit, plus an off-centre orientation test each).
+#### Minor
+1. assets/shaders/title.wgsl (plan 4.8; header "Task 6.7 may adjust this shader") is byte-for-byte fixed_tex_modulate.wgsl's body and unused at runtime; still validated by md-hlsl tests/builtin_wgsl.rs:31,44,264,339,477 and listed in assets/shaders/README.md:20. 6.7 owned it: delete it with its test/README entries (or use it). Deferred cleanup.
+2. frame.rs module doc says user sprites go "in between" title and text, but present() (frame.rs, "User sprites (Milestone 6) go here.") sits after record_comp, which already drew the text: following that comment would put sprites over text, against the preflight ruling (title, user sprites, text). Fix the hook comment for 6.8.
+3. 7.8 handoff: render_title_texture is song-title only and the plan's 7.8 interface (`active() -> Vec<TextDraw>`) conflicts with the C++ (custom messages go through m_supertext, the title texture and ShowSongTitleAnim, plugin.cpp:8458-8540). Record a ledger Note binding 7.8: it needs an md-render custom-message texture path (font-size search mfs:315-397) plus `supertext_mut`.
+4. C++ truncates szTextW in place (mfs:435 `lstrcpyW(&str[...], "...")`), so a later redraw (resize) re-cuts the already-cut text; Rust keeps the original. Benign divergence; document it.
+5. render_title_texture lays the string out once before the generation-retry loop and again inside it (title.rs, `let mut laid = layout(...)` then the loop): the first call is redundant.
+6. No test for now < start_time (negative progress → powf NaN in both C++ and Rust); a dropped FrameCtx still advances the title state (reported).
+
+### Assessment
+**Task quality:** Approved — **Reasoning:** The port matches ShowSongTitleAnim/RenderStringToTitleTexture line for line; all seven brief departures (a)-(g) are upheld by the C++, and the y-flip is right here. The mirrored-y problem lies in 6.2-6.5's fixed-function draws and is escalated separately.
