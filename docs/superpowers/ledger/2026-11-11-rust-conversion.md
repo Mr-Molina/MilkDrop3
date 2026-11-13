@@ -342,3 +342,6 @@ Task 6.1a: minor (deferred): comment wrapping/grammar in frame.rs:9 and the blur
 Task 6.1a: complete (commits ae111aa..0231c9d, review clean) — controller-ruled task, not in the plan's checklist.
 Task 6.2: dispatched (BASE b078627) — binding: F38, F40, Task 5.3 sampler note, Task 6.1a (no main mip regeneration)
 Task 6.2: implementer DONE_WITH_CONCERNS (0161080) — smoothing recursive with scale folded in (milkdropfs.cpp:850-859) and additive = SRCALPHA/ONE, both per C++ over the brief; build_wave returns WaveGeometry (multi-range) via WaveView; identity_vars in tests/frame.rs sets wave_a=0; CPU tests lack RED; wave.rs 622 lines
+Task 6.2: review — Approved, 0 Critical / 0 Important; departures (a)-(d) upheld against milkdropfs.cpp:850-858, 2715-2717, 3233.
+Task 6.2: minor (deferred): many wrong C++ line citations (wave.rs module table, dupe/clip/switch comments, wave_draw.rs "3178" = 3233, two in tests); file nWaveMode 8 hits C++ case 8 but draws nothing in Rust (allowed by F40 — add a comment); NaN alpha / empty smooth_wave input differ from C++ UB (documented); no vertex-formula tests for modes 1,3,4,5; no CPU RED, wave.rs 622 lines, RawWave.alpha needlessly pub, usize_ closure; stale "black until the wave" comment in golden_basic.rs.
+Task 6.2: complete (commits aff10d6..0161080, review clean; controller gate: 607 passed, fmt/clippy/deny/native OK)
