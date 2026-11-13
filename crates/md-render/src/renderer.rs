@@ -167,6 +167,8 @@ pub struct Renderer {
     pub(crate) comp_grid: CompGrid,
     pub(crate) comp_buffers: Option<WarpBuffers>,
     pub(crate) dynbuf: DynamicVertexBuffer,
+    /// The song title texture, font and animation state (6.7).
+    pub(crate) title: crate::title::TitleState,
     last_errors: Vec<RenderError>,
     warned_textures: HashSet<String>,
     fallback_2d: Texture2d,
@@ -214,6 +216,7 @@ impl Renderer {
             comp_grid: comp_grid(window, (w, h)),
             comp_buffers: None,
             dynbuf: DynamicVertexBuffer::new(&gpu, 1024),
+            title: crate::title::TitleState::new(),
             textures: TextureStore::new(&gpu, seed),
             pipelines: PipelineCache::new(),
             shaders: ShaderCache::new(settings.shader_cache_dir.clone()),
@@ -306,6 +309,7 @@ impl Renderer {
             let (ax, ay) = mesh_aspect(tex.0, tex.1);
             self.mesh = WarpMesh::new(self.settings.grid_x, self.settings.grid_y, ax, ay);
             self.prev_uvs = self.mesh.uvs().to_vec();
+            self.title.invalidate();
         }
         if window != self.window || tex != current {
             self.window = window;

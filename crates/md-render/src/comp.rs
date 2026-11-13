@@ -346,6 +346,7 @@ impl Renderer {
         &mut self,
         enc: &mut wgpu::CommandEncoder,
         frame: &CompFrame,
+        title: &[crate::title::TitleDraw],
         text: (&[crate::text_draw::TextDraw], &[crate::text_draw::TextDraw]),
         target: &wgpu::TextureView,
     ) {
@@ -397,8 +398,10 @@ impl Renderer {
                 (CompPass::Shader { .. }, None) => {}
             }
         }
-        // Text and boxes over the composite (6.6; DrawNow runs after
+        // The title animation over the composite (6.7, mfs:1123-1126), then
+        // text and boxes over it (6.6; DrawNow runs after
         // MyRenderFn, pluginshell.cpp:1393-1405), before the copy.
+        Renderer::record_title(&mut batch, title, format);
         Renderer::record_text(&mut batch, text.0, text.1, format);
         batch.finish();
 

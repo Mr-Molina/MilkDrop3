@@ -12,11 +12,13 @@
 //!    ([`Renderer::draw_custom_waves`], 6.4), the built-in
 //!    wave ([`Renderer::draw_wave`], 6.2), `darken_center` and the borders
 //!    ([`Renderer::draw_sprites_fixed`], 6.5), the song title burn-in
-//!    (6.7, a hook), drawn into the warp target (no mips to regenerate: the main textures have one level);
+//!    ([`Renderer::burn_title`], 6.7, on the frame the animation ends),
+//!    drawn into the warp target (no mips to regenerate: the main textures have one level);
 //! 5. ([`Renderer::present`]) the composite into the caller's target
-//!    ([`crate::comp`]), then the text pass queued by [`Renderer::flush_text`]
-//!    (6.6) drawn over it in the composite intermediate, title/user sprites
-//!    on top (Milestone 6 hooks), one submit, and the ping-pong swap
+//!    ([`crate::comp`]), then the song title animation
+//!    ([`Renderer::draw_title_anim`], 6.7) and the text pass queued by
+//!    [`Renderer::flush_text`] (6.6) drawn over it in the composite
+//!    intermediate, user sprites in between (a Milestone 6 hook), one submit, and the ping-pong swap
 //!    ([`Renderer::swap_vs`]).
 //!
 //! Uniforms go through `Queue::write_buffer`, so each preset program is
@@ -185,6 +187,9 @@ pub struct FrameCtx<'a> {
     pub(crate) text: Vec<crate::text_draw::TextDraw>,
     /// The translucent boxes ([`crate::TextQueue::draw_box`]), drawn first.
     pub(crate) text_under: Vec<crate::text_draw::TextDraw>,
+    /// The title animation's screen-mode draws (6.7), drawn after the
+    /// composite and under the text.
+    pub(crate) title: Vec<crate::title::TitleDraw>,
 }
 
 impl std::fmt::Debug for FrameCtx<'_> {
@@ -211,6 +216,8 @@ impl Renderer {
         // One dynamic vertex buffer frame: every fixed-function draw of this
         // frame (Milestone 6 hooks, the composite) writes after this.
         self.dynbuf.begin_frame();
+        // Redraw the title texture if needed (mfs:942-947).
+        let title = self.title_begin_frame(input.now);
         let mut encoder =
             self.gpu
                 .device()
@@ -300,14 +307,26 @@ impl Renderer {
         // user sprites are a later pass (DrawUserSprites, after the
         // composite). Title burn-in (6.7): Milestone 6.
         self.draw_sprites_fixed(&mut encoder, input.vars);
+        // The title burn-in (6.7, mfs:1059-1067): the frame its progress
+        // reaches 1, into the warp target.
+        if title.burn_in {
+            self.burn_title(&mut encoder, input.now);
+        }
 
         let comp = self.prepare_comp(input, &frame, snap, fixed_sampler);
-        FrameCtx {
+        let mut ctx = FrameCtx {
             encoder,
             comp,
             text: Vec::new(),
             text_under: Vec::new(),
+            title: Vec::new(),
+        };
+        // The on-screen draw (6.7, mfs:1123-1129), after the composite.
+        if let Some(progress) = title.screen {
+            self.draw_title_anim(&mut ctx, progress, input.now);
         }
+        self.title_end_frame(&title);
+        ctx
     }
 
     /// The composite's vertex data, plans and uniforms
@@ -411,9 +430,10 @@ impl Renderer {
             comp,
             text,
             text_under,
+            title,
         } = ctx;
-        self.record_comp(&mut encoder, &comp, (&text_under, &text), target);
-        // Title animation and user sprites (Milestone 6) go here.
+        self.record_comp(&mut encoder, &comp, &title, (&text_under, &text), target);
+        // User sprites (Milestone 6) go here.
         self.gpu.queue().submit([encoder.finish()]);
         self.swap_vs();
         self.frames_since_resize = self.frames_since_resize.saturating_add(1);

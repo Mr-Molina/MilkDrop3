@@ -80,6 +80,8 @@ mod text_draw;
 mod text_pass;
 mod texture;
 mod textures;
+mod title;
+mod title_mesh;
 mod uniforms;
 mod vertex;
 mod warp;
@@ -137,6 +139,7 @@ pub use textures::{
     pick_random_texture, scan_texture_names, texture_candidates, RandPicks, TextureError,
     TextureStore, TEXTURE_EXTS,
 };
+pub use title_mesh::{title_passes, MeshInput, SuperText, TitlePlan, SONG_TITLE_DURATION};
 pub use uniforms::{pack_mat4x3, texsizes_bytes, BlurUniforms, MdUniforms, VsParams};
 pub use vertex::{vertices_to_bytes, Vertex};
 pub use warp::{

@@ -121,7 +121,11 @@ pub(crate) fn glyph_vertices(
 /// texture, so draws recorded earlier this frame keep sampling the texels
 /// their UVs were computed for; within one generation glyphs are only
 /// added, and the changed region is uploaded in place.
-fn sync_atlas(gpu: &Gpu, atlas: &mut Atlas, slot: &mut Option<(Texture2d, u64)>) -> Texture2d {
+pub(crate) fn sync_atlas(
+    gpu: &Gpu,
+    atlas: &mut Atlas,
+    slot: &mut Option<(Texture2d, u64)>,
+) -> Texture2d {
     let dirty = atlas.take_dirty();
     let gen = atlas.generation();
     let (pixels, w, h) = atlas.texture_rgba();
