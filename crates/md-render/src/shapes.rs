@@ -12,6 +12,7 @@
 //! point of use; the fields keep that, so a count like `sides` is truncated
 //! here, not by the caller.
 
+use crate::cast::{c_int, color_byte as byte};
 use crate::vertex::Vertex;
 use std::f32::consts::PI;
 
@@ -75,25 +76,6 @@ pub struct ShapeGeometry {
     /// How many `sides + 1`-vertex line strips `out_border` holds: 0 (no
     /// border), 1, or 4 when thick.
     pub border_copies: usize,
-}
-
-/// C's `(int)` on a `double` under MSVC (x87 chop): truncate toward zero;
-/// NaN and values that do not fit an `i32` give "integer indefinite",
-/// `i32::MIN`. Mirrors md-eval's `eel_int` (md-render does not depend on
-/// md-eval); a saturating Rust cast would differ.
-fn c_int(x: f64) -> i32 {
-    let t = x.trunc();
-    if (-2147483648.0..=2147483647.0).contains(&t) {
-        t as i32
-    } else {
-        i32::MIN
-    }
-}
-
-/// `((int)(c * 255 * mult)) & 0xFF` (2304-2313); `a` is multiplied in
-/// `double`, as the C++'s `double * int * float` is.
-fn byte(c: f64, mult: f32) -> u8 {
-    (c_int(c * 255.0 * f64::from(mult)) & 0xFF) as u8
 }
 
 fn color(r: f64, g: f64, b: f64, a: f64, alpha_mult: f32) -> [u8; 4] {
@@ -201,16 +183,6 @@ pub fn build_shape(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn c_int_truncates_and_gives_int_min_out_of_range() {
-        assert_eq!(c_int(3.9), 3);
-        assert_eq!(c_int(-3.9), -3);
-        assert_eq!(c_int(f64::NAN), i32::MIN);
-        assert_eq!(c_int(3e9), i32::MIN);
-        assert_eq!(c_int(-3e9), i32::MIN);
-        assert_eq!(c_int(f64::INFINITY), i32::MIN);
-    }
 
     #[test]
     fn nan_and_overflow_follow_the_cpp() {

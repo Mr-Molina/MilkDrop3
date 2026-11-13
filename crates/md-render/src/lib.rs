@@ -37,14 +37,20 @@
 //!
 //! Task 6.3: custom shapes ([`build_shape`], [`ShapeFrameVars`] in
 //! [`FrameInput::shapes`]).
+//!
+//! Task 6.4: custom waves ([`custom_wave_inputs`], [`build_custom_wave`],
+//! [`CustomWaveDraw`] in [`FrameInput::custom_waves`]).
 #![forbid(unsafe_code)]
 
 mod blend;
 mod blendpattern;
 mod blur;
 mod bytes;
+mod cast;
 mod comp;
 mod comp_fixed;
+mod custom_waves;
+mod custom_waves_draw;
 mod dynbuf;
 mod fixed;
 mod frame;
@@ -81,6 +87,10 @@ pub use comp::{
     CompPass, COMP_GRID_X, COMP_GRID_Y,
 };
 pub use comp_fixed::{fixed_comp_draws, rgba_01, EchoBlend, FixedCompDraw, FixedCompParams};
+pub use custom_waves::{
+    build_custom_wave, custom_wave_inputs, CustomWaveDraw, CustomWaveFrame, CustomWaveGeometry,
+    CustomWaveInput, CustomWavePoint, CustomWaveView,
+};
 pub use dynbuf::DynamicVertexBuffer;
 pub use fixed::{fan_to_list, points_to_quads, FixedMode, SamplerKind, Topo};
 pub use frame::{FrameCtx, FrameInput};

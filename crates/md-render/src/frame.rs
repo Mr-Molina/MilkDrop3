@@ -7,7 +7,9 @@
 //!    [`Renderer::other_vs`]`(`[`Renderer::warp_target`]`)`) to black;
 //! 3. the warp pass ([`Renderer::warp_pass`]) into the warp target, with
 //!    (single-level, as in the C++: no mip generation anywhere in the frame);
-//! 4. blur passes ([`Renderer::blur_passes`]), custom shapes ([`Renderer::draw_shapes`], 6.3), custom waves, the built-in
+//! 4. blur passes ([`Renderer::blur_passes`]), custom shapes
+//!    ([`Renderer::draw_shapes`], 6.3), custom waves
+//!    ([`Renderer::draw_custom_waves`], 6.4), the built-in
 //!    wave ([`Renderer::draw_wave`], 6.2), sprites incl. `darken_center` and borders (Milestone 6), the
 //!    song title burn-in (6.7) — no-op hooks here, drawn into the warp
 //!    target (no mips to regenerate: the main textures have one level);
@@ -33,6 +35,7 @@
 
 use crate::comp::{comp_vertices, cull_indices, hue_shades, plan_comp_passes, CompFrame, CompPass};
 use crate::comp_fixed::{fixed_comp_draws, EchoBlend, FixedCompParams};
+use crate::custom_waves::CustomWaveDraw;
 use crate::fixed::SamplerKind;
 use crate::frame_vars::PerFrameVars;
 use crate::mesh::VertInfo;
@@ -97,6 +100,12 @@ pub struct FrameInput<'a> {
     pub shapes: &'a [ShapeFrameVars],
     /// The old preset's, drawn only while blending.
     pub old_shapes: &'a [ShapeFrameVars],
+    /// Task 6.4: every enabled custom wave of the current preset with at
+    /// least the samples `DrawCustomWaves` needs, after its per-frame and
+    /// per-point programs ran (wave 0..4); filled by md-core (F38).
+    pub custom_waves: &'a [CustomWaveDraw],
+    /// The old preset's, drawn only while blending.
+    pub old_custom_waves: &'a [CustomWaveDraw],
 }
 
 impl<'a> FrameInput<'a> {
@@ -134,6 +143,8 @@ impl<'a> FrameInput<'a> {
             old_gpu: None,
             shapes: &[],
             old_shapes: &[],
+            custom_waves: &[],
+            old_custom_waves: &[],
         }
     }
 
@@ -269,9 +280,10 @@ impl Renderer {
         }
         // Custom shapes (6.3, DrawCustomShapes, 1054; they inherit the
         // stage-0 sampler state, `fixed_sampler`), custom waves (6.4,
-        // Milestone 6). Then the built-in wave (DrawWave, after them so
-        // it draws over them, 1054-1056), into the warp target.
+        // DrawCustomWaves, 1055). Then the built-in wave (DrawWave, after
+        // them so it draws over them, 1054-1056), into the warp target.
         self.draw_shapes(&mut encoder, input, fixed_sampler);
+        self.draw_custom_waves(&mut encoder, input);
         self.draw_wave(&mut encoder, input);
         // Sprites/darken_center/borders (6.5), title burn-in (6.7):
         // Milestone 6.
