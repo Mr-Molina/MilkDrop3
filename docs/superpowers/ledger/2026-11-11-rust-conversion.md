@@ -328,3 +328,6 @@ Task 5.8: fix round 1/5 (3 addressed, 0 open — golden now from shader-only ps2
 Task 5.8: minor (deferred): main.rs exit/print wiring untested beyond run().
 Task 5.8: Note (binds 6.9): default_60.png is rendered from ps2/shader_rings.milk, not a "default" preset; 6.9 should rename or re-point it when the manifest-driven suite lands. Frame numbering is 1-based (frame n at t = n/60).
 Task 5.8: complete (commits 92150ab..f05ee6b + fix 50674fa, review clean after 1 fix round; controller gate: 585 passed, fmt/clippy/deny/native OK)
+Task 6.1: Ruling: blur texture sizes follow the C++ (plugin.cpp:1986-2007), not the milestone text — for i in 0..6: w,h halve (max 16) when i is even or i<2, then w2=((w+3)/16)*16, h2=((h+3)/4)*4; so tex0 ½, tex1 ¼ (user blur1), tex2/3 ⅛ (blur2), tex4/5 1/16 (blur3). Test blur_texture_sizes_halve_per_level_and_are_even asserts these exact sizes (multiples of 16 wide / 4 high) instead of "even" — confirms the 5.5 note — cost if wrong: none (C++ parity).
+Task 6.1: Ruling: per F38/F39, blur_passes takes &PerFrameVars (post-equation b1n..b3x, blur1_edge_darken), and highest_used comes from the Translated.samplers roots blur1..3 of both shaders (no text scan), stored on PresetGpu — the brief's `preset: &Preset` signature and text scan are superseded — cost if wrong: none.
+Task 6.1: dispatched (BASE fd62684)
