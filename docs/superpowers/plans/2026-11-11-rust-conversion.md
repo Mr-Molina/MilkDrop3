@@ -940,10 +940,10 @@ Pinned rendering facts from `milkdropfs.cpp` and `plugin.cpp`:
 **Files:**
 - Create: `tests/golden/manifest.toml`, `apps/milkdrop/tests/golden_suite.rs`
 
-- [ ] **Step 1:** Write `manifest.toml`: 40 presets chosen per A.4 coverage, each with frames `[1, 60, 300]`, size `640x480`, seed `7`, `max_dssim` per entry (default `0.02`, `0.05` for blur-heavy presets).
-- [ ] **Step 2:** Write test `golden_suite` iterating the manifest through the `render` subcommand's library entry point (`render_cmd::render_to_images`) and `compare_png`.
-- [ ] **Step 3:** Run with `MD_BLESS=1`, inspect every image against the Windows captures, commit the goldens; run without bless. Expected: PASS.
-- [ ] **Step 4:** Commit: `test(render): golden suite over 40 presets`
+- [x] **Step 1:** Write `manifest.toml`: 40 presets chosen per A.4 coverage, each with frames `[1, 60, 300]`, size `640x480`, seed `7`, `max_dssim` per entry (default `0.02`, `0.05` for blur-heavy presets).
+- [x] **Step 2:** Write test `golden_suite` iterating the manifest through the `render` subcommand's library entry point (`render_cmd::render_to_images`) and `compare_png`.
+- [x] **Step 3:** Run with `MD_BLESS=1`, inspect every image against the Windows captures, commit the goldens; run without bless. Expected: PASS.
+- [x] **Step 4:** Commit: `test(render): golden suite over 40 presets`
 
 ## Milestone 7: `md-core`, the visualizer
 

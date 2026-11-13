@@ -413,3 +413,7 @@ Task 6.9: implementer DONE_WITH_CONCERNS (c10cfc9) — RED listed all 99 missing
 Controller: Note (binds the hand-off gate and 7.9): the gate now also runs `MD_REQUIRE_GPU=1 cargo test -p milkdrop --test golden_suite -- --include-ignored` (~4.5 min).
 Task 6.9: review — 1 Important: the golden_suite CI step (.github/workflows/ci.yml:62-65) runs on the ubuntu/macos/windows matrix but MD_REQUIRE_GPU/WGPU_ADAPTER_NAME=llvmpipe are Linux-only, so macOS/Windows skip or fail against lavapipe baselines. Everything else verified (24 shape fields, 0.05 on the 3 GetBlur presets, covers, the 5 black baselines' reasons, determinism, size).
 Task 6.9: fix round 1/5 dispatched (Important: Linux-only golden CI step). Folded in: .gitignore for *.diff.png; README note that within-threshold drift is not re-blessed.
+Task 6.9: fix round 1/5 (3 addressed, 0 open — golden CI step Linux-only with step-level MD_REQUIRE_GPU/WGPU_ADAPTER_NAME; *.diff.png ignored; README bless note; commits 483ecd5..3eccf20)
+Task 6.9: minor (deferred): ps2/noise_grain frame 60 is a saturated white Lissajous blob (weak baseline — re-check at 7.9); ci.yml:24 uses matrix.os where other steps use runner.os.
+Task 6.9: complete (commits c1f96e8..c10cfc9 + fix 3eccf20, review clean after 1 fix round; controller gate: 692 passed, golden_suite 2/2 in 252 s, fmt/clippy/deny/native OK)
+Controller: MILESTONE 6 COMPLETE (6.1-6.9 plus controller-ruled 6.1a single-level main textures and 6.7a single ortho projection). Next: Milestone 7 (md-core), Task 7.1.

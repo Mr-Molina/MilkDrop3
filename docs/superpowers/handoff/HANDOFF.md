@@ -16,8 +16,9 @@ Written 2026-11-12 17:25 UTC at the hand-off from the first controller session.
 | 2 `md-preset` (2.1–2.5) | complete |
 | 3 `md-analysis`, `md-audio` (3.1–3.6) | complete |
 | 4 `md-hlsl` translator (4.1–4.10) | complete |
-| 5 `md-text` + render foundation | 5.1–5.7 complete; **5.8 not started on disk** |
-| 6–9 | not started |
+| 5 `md-text` + render foundation | complete |
+| 6 Full renderer (6.1–6.9, plus 6.1a and 6.7a) | complete |
+| 7–9 | not started |
 
 **Next task: 5.8** (`render` subcommand and first golden images). Its implementer was cut off by a usage limit before writing any files, so start it fresh. The dispatch prompt used is reproduced below under "Dispatching 5.8".
 
