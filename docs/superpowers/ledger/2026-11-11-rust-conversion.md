@@ -324,3 +324,7 @@ Task 5.8: Ruling: md-testkit stays a normal dependency of the app for now — he
 Task 5.8: Ruling: per-component Pcg32 streams (driver, Renderer::new(seed), TextureStore) all derived from the single --seed satisfy the determinism requirement; the byte-identical test is the check — "one Pcg32" in the hand-off meant "one seed" — cost if wrong: none (output deterministic either way).
 Task 5.8: minor (deferred): --frames/--every parse errors omit the flag name (fold into fix round 1).
 Task 5.8: fix round 1/5 dispatched (Important 1 golden structure + discrimination; Important 2 run() test; folded minor: flag names in errors).
+Task 5.8: fix round 1/5 (3 addressed, 0 open — golden now from shader-only ps2/shader_rings.milk with black-frame discrimination check; run() PNG test; flag names in parse errors; commits 75ab9da..50674fa)
+Task 5.8: minor (deferred): main.rs exit/print wiring untested beyond run().
+Task 5.8: Note (binds 6.9): default_60.png is rendered from ps2/shader_rings.milk, not a "default" preset; 6.9 should rename or re-point it when the manifest-driven suite lands. Frame numbering is 1-based (frame n at t = n/60).
+Task 5.8: complete (commits 92150ab..f05ee6b + fix 50674fa, review clean after 1 fix round; controller gate: 585 passed, fmt/clippy/deny/native OK)

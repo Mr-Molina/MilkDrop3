@@ -1,6 +1,6 @@
 # Rules for every implementer on the MilkDrop3 Rust conversion
 
-Repo: /home/user/MilkDrop3, branch rust-experiment. The C++ reference tree is code/ (read it to pin semantics).
+Repo: /home/user/MilkDrop3, branch claude/upbeat-hawking-xwlz3z (the controller fast-forwards rust-experiment to it). The C++ reference tree is code/ (read it to pin semantics).
 
 Read, in order:
 1. Your task brief (path given in your dispatch) — your requirements, exact values verbatim.
@@ -16,9 +16,9 @@ Working rules:
 - Keep files under ~600 lines; one responsibility per file.
 - Commit with the message given in the brief, ending with exactly these trailer lines:
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01SUnx2i2kYPom424TCZtfvS
+  Claude-Session: https://claude.ai/code/session_017tXyaXCWMn9fL4zB5gZsF8
 - Do NOT push. Do NOT edit docs/superpowers/ (plan, ledger).
-- Stay on branch rust-experiment: never `git checkout`/`switch` another commit in /home/user/MilkDrop3 (use `git archive` or a worktree under the scratchpad to inspect old code).
+- Stay on the checked-out branch: never `git checkout`/`switch` another commit in /home/user/MilkDrop3 (use `git archive` or a worktree under the scratchpad to inspect old code).
 - You do not dispatch subagents of any kind (no helpers, no reviewers). Self-review = read your own diff.
 - If unclear or blocked: stop and report NEEDS_CONTEXT / BLOCKED with specifics. Don't guess on architecture.
 
