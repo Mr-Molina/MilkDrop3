@@ -40,6 +40,9 @@
 //!
 //! Task 6.4: custom waves ([`custom_wave_inputs`], [`build_custom_wave`],
 //! [`CustomWaveDraw`] in [`FrameInput::custom_waves`]).
+//!
+//! Task 6.5: motion vectors, borders and the darken-centre fan
+//! ([`build_motion_vectors`], [`build_borders`], [`build_darken_center`]).
 #![forbid(unsafe_code)]
 
 mod blend;
@@ -60,6 +63,8 @@ mod image_load;
 mod mesh;
 mod mips;
 pub mod noise;
+mod overlays;
+mod overlays_draw;
 mod pipelines;
 mod preset_bind;
 mod preset_gpu;
@@ -101,6 +106,10 @@ pub use mesh::{
     mesh_aspect, PerPixelRunner, PerPixelVars, VertInfo, WarpMesh, MAX_GRID_X, MAX_GRID_Y,
 };
 pub use mips::{generate_mips, record_mips};
+pub use overlays::{
+    build_borders, build_darken_center, build_motion_vectors, reverse_propagate_point, Border,
+    MotionMesh, MotionVectorVars,
+};
 pub use pipelines::{DrawBatch, PipelineCache, PipelineKey};
 pub use preset_bind::{sampler_kind, SlotSource};
 pub use preset_gpu::{PresetGpu, ShaderProgram};

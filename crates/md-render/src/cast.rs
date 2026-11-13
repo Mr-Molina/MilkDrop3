@@ -20,6 +20,13 @@ pub(crate) fn color_byte(c: f64, mult: f32) -> u8 {
     (c_int(c * 255.0 * f64::from(mult)) & 0xFF) as u8
 }
 
+/// `D3DCOLOR_RGBA_01(r, g, b, a)` (milkdropfs.cpp:40) on `float` arguments:
+/// `((int)(x * 255)) & 0xFF` per channel, the product taken in `float`,
+/// the cast as [`c_int`]. Returned as R, G, B, A bytes.
+pub(crate) fn rgba_01_f32(r: f32, g: f32, b: f32, a: f32) -> [u8; 4] {
+    [r, g, b, a].map(|x| (c_int(f64::from(x * 255.0)) & 0xFF) as u8)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

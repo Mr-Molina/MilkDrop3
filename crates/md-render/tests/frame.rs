@@ -41,7 +41,8 @@ fn upload_solid(gpu: &Gpu, t: &Texture2d, rgba: [u8; 4]) {
 
 /// Motion that maps every pixel onto itself, decay 1, no echo, gamma 1,
 /// no hue shader, no built-in wave (the default preset's wave, alpha 0.8,
-/// would otherwise draw into every frame, Task 6.2).
+/// would otherwise draw into every frame, Task 6.2) and no motion vectors
+/// (the default preset's `mv_a` is 1 with a 12 x 9 grid, Task 6.5).
 fn identity_vars(p: &md_preset::Preset) -> PerFrameVars {
     let mut v = PerFrameVars::from_preset(p, 0.0);
     (v.zoom, v.zoomexp, v.rot, v.warp) = (1.0, 1.0, 0.0, 0.0);
@@ -49,6 +50,7 @@ fn identity_vars(p: &md_preset::Preset) -> PerFrameVars {
     (v.decay, v.wrap, v.gamma, v.echo_alpha) = (1.0, 1.0, 1.0, 0.0);
     v.shader = 0.0;
     v.wave_a = 0.0;
+    v.mv_a = 0.0;
     v
 }
 

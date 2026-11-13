@@ -155,6 +155,9 @@ pub struct Renderer {
     /// programs bound to an older generation are rebound before drawing.
     pub(crate) generation: u64,
     pub(crate) mesh: WarpMesh,
+    /// The mesh UVs of the previous frame: what `m_verts` holds when the
+    /// motion vectors are drawn, before this frame's UVs replace it (6.5).
+    pub(crate) prev_uvs: Vec<[f32; 2]>,
     /// `m_nFramesSinceResize`: 0 clears the warp source on the next frame.
     pub(crate) frames_since_resize: u32,
     /// `m_fRandStart[4]` (plugin.cpp:6623-6626), for the hue shader.
@@ -201,6 +204,9 @@ impl Renderer {
         Ok(Renderer {
             window,
             generation: 0,
+            prev_uvs: WarpMesh::new(settings.grid_x, settings.grid_y, ax, ay)
+                .uvs()
+                .to_vec(),
             mesh: WarpMesh::new(settings.grid_x, settings.grid_y, ax, ay),
             frames_since_resize: 0,
             rand_start,
@@ -296,6 +302,7 @@ impl Renderer {
             self.generation += 1;
             let (ax, ay) = mesh_aspect(tex.0, tex.1);
             self.mesh = WarpMesh::new(self.settings.grid_x, self.settings.grid_y, ax, ay);
+            self.prev_uvs = self.mesh.uvs().to_vec();
         }
         if window != self.window || tex != current {
             self.window = window;

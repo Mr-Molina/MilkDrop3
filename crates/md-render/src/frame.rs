@@ -1,7 +1,7 @@
 //! The frame loop (A.3 `begin_frame` / `present`, Task 5.7), in
 //! `RenderFrame`'s order (code/vis_milk2/milkdropfs.cpp:751-1137@6f7cd5d):
 //!
-//! 1. motion vectors into the warp source (Milestone 6 hook, 6.5);
+//! 1. motion vectors into the warp source ([`Renderer::draw_motion_vectors`], 6.5);
 //! 2. on the first frame after a resize (`m_nFramesSinceResize == 0`,
 //!    971-981) clear the warp source (`m_lpVS[0]`, here
 //!    [`Renderer::other_vs`]`(`[`Renderer::warp_target`]`)`) to black;
@@ -10,9 +10,9 @@
 //! 4. blur passes ([`Renderer::blur_passes`]), custom shapes
 //!    ([`Renderer::draw_shapes`], 6.3), custom waves
 //!    ([`Renderer::draw_custom_waves`], 6.4), the built-in
-//!    wave ([`Renderer::draw_wave`], 6.2), sprites incl. `darken_center` and borders (Milestone 6), the
-//!    song title burn-in (6.7) — no-op hooks here, drawn into the warp
-//!    target (no mips to regenerate: the main textures have one level);
+//!    wave ([`Renderer::draw_wave`], 6.2), `darken_center` and the borders
+//!    ([`Renderer::draw_sprites_fixed`], 6.5), the song title burn-in
+//!    (6.7, a hook), drawn into the warp target (no mips to regenerate: the main textures have one level);
 //! 5. ([`Renderer::present`]) the composite into the caller's target
 //!    ([`crate::comp`]), then title/user sprites on top (Milestone 6
 //!    hooks), one submit, and the ping-pong swap ([`Renderer::swap_vs`]).
@@ -211,7 +211,11 @@ impl Renderer {
                     label: Some("md-render frame"),
                 });
 
-        // 1. Motion vectors (Milestone 6).
+        // 1. Motion vectors (6.5, DrawMotionVectors, 965), into the warp
+        //    source before the clear and the warp; they use the previous
+        //    frame's mesh UVs, so this frame's are saved after.
+        self.draw_motion_vectors(&mut encoder, input.vars);
+        self.snapshot_mesh_uvs();
         // 2. First frame after a resize: clear the old VS.
         if self.frames_since_resize == 0 {
             let src = &self.vs[Renderer::other_vs(self.vs_target)];
@@ -285,8 +289,10 @@ impl Renderer {
         self.draw_shapes(&mut encoder, input, fixed_sampler);
         self.draw_custom_waves(&mut encoder, input);
         self.draw_wave(&mut encoder, input);
-        // Sprites/darken_center/borders (6.5), title burn-in (6.7):
-        // Milestone 6.
+        // DrawSprites (1057): darken_center, then the borders (6.5). The
+        // user sprites are a later pass (DrawUserSprites, after the
+        // composite). Title burn-in (6.7): Milestone 6.
+        self.draw_sprites_fixed(&mut encoder, input.vars);
 
         let comp = self.prepare_comp(input, &frame, snap, fixed_sampler);
         FrameCtx { encoder, comp }
