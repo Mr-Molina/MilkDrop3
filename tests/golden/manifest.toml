@@ -2,53 +2,194 @@
 #
 # - tests/golden/windows/: one-off visual references captured from the C++ build
 #   (procedure in tests/golden/windows/README.md).
-# - tests/golden/rust/: the Rust renderer's own committed baselines (Task 6.9,
-#   which extends this list to ~40 presets and adds per-entry thresholds).
+# - tests/golden/rust/: the Rust renderer's own committed baselines, one PNG per
+#   preset and frame (`rust/<dir>/<name>/frame_<n>.png`), checked by
+#   apps/milkdrop/tests/golden_suite.rs (Task 6.9). The suite covers the whole
+#   corpus under tests/presets/ and fails if a corpus preset is missing here.
 #
 # `path` is relative to tests/presets/. Values in [defaults] apply to every
 # entry unless the entry overrides them.
+#
+# `driver` names what produced the baselines. "static" is the Task 5.8 headless
+# driver: no per-frame/per-pixel/per-point equations run, each enabled custom
+# shape is drawn once from its preset-file values, custom waves are empty. The
+# baselines are PROVISIONAL until Task 7.9 replaces the driver with
+# md_core::Visualizer: flip every entry to "visualizer", re-bless, re-inspect.
+#
+# Baselines are 320x240 to keep committed binary churn small; pixel-exact
+# behaviour is pinned by the md-render unit and GPU tests.
 
 [defaults]
-width = 640
-height = 480
+width = 320
+height = 240
 seed = 7
-frames = [1, 60, 300, 600]
+frames = [1, 60, 300]
 max_dssim = 0.02
+
+[[preset]]
+path = "classic/bass_kaleido.milk"
+covers = ["MilkDrop 1", "motion vectors (bMotionVectorsOn), sqr/sqrt/abs/pow/equal/sign in per-pixel"]
+driver = "static"
 
 [[preset]]
 path = "classic/drift_tunnel.milk"
 covers = ["PSVERSION 0", "per-frame + per-pixel motion"]
+driver = "static"
+
+[[preset]]
+path = "classic/echo_feedback.milk"
+covers = ["MilkDrop 1", "video echo, darken center, solarize/invert flags, wave mode 6"]
+driver = "static"
 
 [[preset]]
 path = "classic/orbiting_shapes.milk"
 covers = ["PSVERSION 0", "custom shapes"]
+driver = "static"
+
+[[preset]]
+path = "classic/q_init_rand.milk"
+covers = ["MilkDrop 1", "per_frame_init with rand() and q1..q8 carried to per-pixel"]
+driver = "static"
+
+[[preset]]
+path = "classic/spectral_rings.milk"
+covers = ["MilkDrop 1.04 custom wave (spectrum, per-point code, value1/value2)"]
+driver = "static"
+
+[[preset]]
+path = "edge/crlf_bom_junk.milk"
+covers = ["PSVERSION 2", "Review Focus #3 fixture: UTF-8 BOM, CRLF line endings, trailing junk after [preset00] (kept byte-exact via .gitattributes -text)"]
+driver = "static"
+
+[[preset]]
+path = "edge/eel_syntax_zoo.milk"
+covers = ["PSVERSION 2", "EEL syntax: comments, blank lines, $x hex, $PI/$E/$PHI, ^, ^=, %, ?:, ==, &&, ||, !, a[b], bnot/band/bor/sigmoid/invsqrt/exec3/assign/memset/memcpy/freembuf"]
+driver = "static"
+
+[[preset]]
+path = "edge/missing_texture.milk"
+covers = ["PSVERSION 2", "references a texture that does not exist (Review Focus #1: fallback texture)"]
+driver = "static"
 
 [[preset]]
 path = "ps2/blur_glow.milk"
 covers = ["PSVERSION 2", "GetBlur1", "GetBlur2"]
+driver = "static"
 max_dssim = 0.05
+
+[[preset]]
+path = "ps2/borders_motion.milk"
+covers = ["PSVERSION 2", "outer/inner borders and motion vectors driven from per-frame (ob_*, ib_*, mv_*), wave flags"]
+driver = "static"
+
+[[preset]]
+path = "ps2/megabuf_trails.milk"
+covers = ["PSVERSION 2", "megabuf ring buffer written in per-frame with loop(), read by a custom wave per-point"]
+driver = "static"
+
+[[preset]]
+path = "ps2/noise_grain.milk"
+covers = ["PSVERSION 2", "sampler_noise_lq + texsize_noise_lq, sampler_pw_noise_lq, sampler_rand00 + texsize, rand_frame"]
+driver = "static"
+
+[[preset]]
+path = "ps2/qvar_bank.milk"
+covers = ["PSVERSION 2", "q1..q16 from per-frame, read in per-pixel and in shaders via q-names and _qa.._qd"]
+driver = "static"
+
+[[preset]]
+path = "ps2/rand_tiles.milk"
+covers = ["PSVERSION 2", "random textures sampler_rand01_smalltiled, sampler_rand02, sampler_rand03 (+ texsize_)"]
+driver = "static"
+
+[[preset]]
+path = "ps2/shader_rings.milk"
+covers = ["PSVERSION 2", "shader-only picture (no waves/shapes): comp shader draws rings, spokes and a colour gradient from rad/ang/uv/time, modulated by bass and treb", "Task 5.8 golden"]
+driver = "static"
+
+[[preset]]
+path = "ps2/upgraded_default.milk"
+covers = ["PSVERSION 2", "an MD1 preset upgraded by MilkDrop 2 (generated default warp/comp text)"]
+driver = "static"
 
 [[preset]]
 path = "ps2/user_texture.milk"
 covers = ["PSVERSION 2", "user texture sampler_mytex", "textured shape"]
+driver = "static"
+
+[[preset]]
+path = "ps2/version200.milk"
+covers = ["PSVERSION 2 written by MilkDrop 2.0 (MILKDROP_PRESET_VERSION=200: PSVERSION only, no _WARP/_COMP)"]
+driver = "static"
 
 [[preset]]
 path = "ps2x/blur3_bloom.milk"
 covers = ["PSVERSION 3", "GetBlur1", "GetBlur2", "GetBlur3"]
+driver = "static"
 max_dssim = 0.05
 
 [[preset]]
-path = "ps2x/tex2dbias_soft.milk"
-covers = ["PSVERSION 3", "tex2Dbias"]
+path = "ps2x/four_shapes.milk"
+covers = ["PSVERSION 3", "all four custom shapes enabled, instancing (num_inst/instance), rand(), textured shape"]
+driver = "static"
 
 [[preset]]
 path = "ps2x/gmegabuf_share.milk"
 covers = ["PSVERSION 3", "custom waves", "gmegabuf", "reg00", "while"]
+driver = "static"
 
 [[preset]]
-path = "ps3/noise_volume.milk"
-covers = ["PSVERSION 4", "tex3D", "sampler_noisevol_hq"]
+path = "ps2x/rand_gallery.milk"
+covers = ["PSVERSION 3", "random textures sampler_rand04..07 (one clamped/point-sampled via fc_/pw_ prefixes)"]
+driver = "static"
+
+[[preset]]
+path = "ps2x/tex2dbias_soft.milk"
+covers = ["PSVERSION 3", "tex2Dbias"]
+driver = "static"
+
+[[preset]]
+path = "ps2x/upgraded_echo.milk"
+covers = ["PSVERSION 3", "upgraded MD1 preset whose generated comp shader uses video echo, wrap off (sampler_fc_main)"]
+driver = "static"
+
+[[preset]]
+path = "ps3/all_q32.milk"
+covers = ["PSVERSION 4", "all q1..q32 set in per-frame, read in shaders by name and as _qe.._qh banks"]
+driver = "static"
 
 [[preset]]
 path = "ps3/four_waves.milk"
 covers = ["PSVERSION 4", "four custom waves", "spectrum"]
+driver = "static"
+
+[[preset]]
+path = "ps3/loop_shader.milk"
+covers = ["PSVERSION 4", "HLSL for-loop radial blur (ps_3_0), random textures sampler_rand08..11"]
+driver = "static"
+
+[[preset]]
+path = "ps3/mixed_versions.milk"
+covers = ["PSVERSION 4 with PSVERSION_WARP=2 and PSVERSION_COMP=4 (different per-shader versions)"]
+driver = "static"
+max_dssim = 0.05
+
+[[preset]]
+path = "ps3/noise_volume.milk"
+covers = ["PSVERSION 4", "tex3D", "sampler_noisevol_hq"]
+driver = "static"
+
+[[preset]]
+path = "ps3/rand_mosaic.milk"
+covers = ["PSVERSION 4", "random textures sampler_rand12..15 in a 2x2 mosaic"]
+driver = "static"
+
+[[preset]]
+path = "ps3/sampler_modes.milk"
+covers = ["PSVERSION 4", "main-texture sampler variants fc_/pc_/pw_/fw_, tex2Dlod, GetMain/GetPixel/lum macros"]
+driver = "static"
+
+[[preset]]
+path = "ps3/volume_lq_rot.milk"
+covers = ["PSVERSION 4", "tex3D on sampler_noisevol_lq with rot_s1 matrix (mul), hue_shader in comp"]
+driver = "static"

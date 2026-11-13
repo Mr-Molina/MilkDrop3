@@ -2,8 +2,10 @@
 //! Task 7.9.
 //!
 //! Scope: per-frame values come only from the static preset
-//! ([`PerFrameVars::from_preset`]) plus `progress`; no equations, waves or
-//! shapes run. Everything is deterministic: two [`FixedClock`]s at 60 fps
+//! ([`PerFrameVars::from_preset`]) plus `progress`; no equations or custom
+//! waves run. Each enabled custom shape is drawn once from its static
+//! (preset-file) values (Task 6.9 ruling; `num_inst` is ignored without
+//! equations). Everything is deterministic: two [`FixedClock`]s at 60 fps
 //! (frame `n` renders at time `n / 60`, `n` counting from 1, for both the
 //! absolute clock and the since-preset-start clock), one `Pcg32` seeded from
 //! the `--seed` for `rand_preset`, the rotations, `rand_frame` and the
@@ -16,7 +18,7 @@ use md_preset::{parse_milk, ParseError, Preset};
 use md_render::noise::crand;
 use md_render::{
     frand, randomize_preset_vars, read_texture_level, FrameInput, Gpu, PerFrameVars, PresetGpu,
-    RenderError, RenderSettings, Renderer, RgbaImage, RotParams, Texture2d,
+    RenderError, RenderSettings, Renderer, RgbaImage, RotParams, ShapeFrameVars, Texture2d,
 };
 use md_testkit::FixedClock;
 use rand_core::SeedableRng;
@@ -53,6 +55,8 @@ pub struct Headless {
     preset: Preset,
     pg: PresetGpu,
     rot: [RotParams; 24],
+    /// One static instance per enabled shape (shape order).
+    shapes: Vec<ShapeFrameVars>,
     rand_preset: [f32; 4],
     rng: Pcg32,
     audio: Box<dyn AudioSource>,
@@ -101,12 +105,14 @@ impl Headless {
         // the sum (plugin.cpp:940-942 defaults).
         let dt = TIME_BETWEEN_PRESETS_RAND * (crand(&mut rng) % 1000) as f32 * 0.001;
         let preset_duration = BLEND_TIME_AUTO + TIME_BETWEEN_PRESETS + dt;
+        let shapes = static_shapes(&preset);
         let target = Texture2d::new_target(gpu, w, h, wgpu_rgba8(), false);
         Ok(Headless {
             renderer,
             preset,
             pg,
             rot,
+            shapes,
             rand_preset,
             rng,
             audio,
@@ -149,6 +155,7 @@ impl Headless {
             progress,
             rand_frame,
             rand_preset: self.rand_preset,
+            shapes: &self.shapes,
             now,
             preset_start_time: now - time,
             ..FrameInput::new(&self.preset, &self.pg, &vars, &self.rot, &sound)
@@ -159,6 +166,42 @@ impl Headless {
         RgbaImage::from_raw(self.target.w, self.target.h, bytes)
             .expect("readback is w*h RGBA8 bytes")
     }
+}
+
+/// Each enabled shape's preset-file values as one instance (no per-frame
+/// program runs, so `instance` is 0 and `num_inst` 1).
+fn static_shapes(preset: &Preset) -> Vec<ShapeFrameVars> {
+    preset
+        .shapes
+        .iter()
+        .filter(|s| s.enabled != 0)
+        .map(|s| ShapeFrameVars {
+            x: f64::from(s.x),
+            y: f64::from(s.y),
+            rad: f64::from(s.rad),
+            ang: f64::from(s.ang),
+            tex_ang: f64::from(s.tex_ang),
+            tex_zoom: f64::from(s.tex_zoom),
+            r: f64::from(s.r),
+            g: f64::from(s.g),
+            b: f64::from(s.b),
+            a: f64::from(s.a),
+            r2: f64::from(s.r2),
+            g2: f64::from(s.g2),
+            b2: f64::from(s.b2),
+            a2: f64::from(s.a2),
+            border_r: f64::from(s.border_r),
+            border_g: f64::from(s.border_g),
+            border_b: f64::from(s.border_b),
+            border_a: f64::from(s.border_a),
+            sides: f64::from(s.sides),
+            textured: f64::from(s.textured),
+            additive: f64::from(s.additive),
+            thick: f64::from(s.thick_outline),
+            instance: 0,
+            num_inst: 1,
+        })
+        .collect()
 }
 
 fn wgpu_rgba8() -> md_render::wgpu::TextureFormat {
