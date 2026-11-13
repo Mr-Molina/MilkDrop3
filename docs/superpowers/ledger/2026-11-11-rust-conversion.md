@@ -399,3 +399,7 @@ Task 6.8: implementer DONE_WITH_CONCERNS (70b63c3) — RED → GREEN (6 unit, 1 
 Task 6.8: review — departures (a)-(e) upheld (mfs:3474, 3513, 3618-3619, 3642-3729, 3733-3748, 1131-1136; texmgr.cpp:109); burn consistent with swap_vs; 1 Important: kill_sprite removes a TextureId still shared by other sprites loaded from the same file (C++ KillTex frees only when unused, texmgr.cpp:156-165).
 Task 6.8: minor (deferred): report cites the flip as mfs:1133-1135 (is 1134-1136); D3DX keyed-pixel → transparent black and pow2 rounding unverifiable from the tree.
 Task 6.8: fix round 1/5 dispatched (Important: per-id instance count in load_sprite/kill_sprite + test). Folded in: on-screen upright-image test; GPU readback tests for blend modes 2-4; record_comp named params instead of over.0/over.1.
+Task 6.8: fix round 1/5 (4 addressed, 0 open — per-slot sprite handles over shared textures freed at last kill; upright test; blend 2/3/4 readbacks; named record_comp params; commits 9a7e82c..5f72ced)
+Task 6.8: minor (deferred): texture() still resolves raw shared ids (unreachable); kill scan O(slots); new shared-texture test not RED-run against old code.
+Task 6.8: Note (binds 7.8): sprites are created with load_sprite(gpu, path, colorkey: u32) -> Result<handle>; LaunchSprite failure means no sprite; kill_sprite per slot; SpriteFrame.done drives the burn/aspect-undo quirk; sprite var_y 0 = top.
+Task 6.8: complete (commits 1370d4f..70b63c3 + fix 5f72ced, review clean after 1 fix round; controller gate: 691 passed, fmt/clippy/deny/native OK)
