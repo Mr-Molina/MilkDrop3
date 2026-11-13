@@ -30,10 +30,13 @@
 //! [`FrameInput`], [`Renderer::present`] into any target), the composite
 //! pass ([`comp_grid`], the preset composite shaders) and its no-shader
 //! path ([`fixed_comp_draws`]), and [`Renderer::resize`] (clamped, F56).
+//!
+//! Task 6.1: the blur chain ([`Renderer::blur_passes`], [`blur_scale_bias`]).
 #![forbid(unsafe_code)]
 
 mod blend;
 mod blendpattern;
+mod blur;
 mod bytes;
 mod comp;
 mod comp_fixed;
@@ -63,6 +66,7 @@ mod warp;
 
 pub use blend::BlendMode;
 pub use blendpattern::{blend_pattern, frand, gen_plasma, randomize_blend_pattern, BlendPattern};
+pub use blur::{blur_scale_bias, pass_uniforms, BLUR_WEIGHTS, MIN_RANGE, NUM_BLUR_TEX};
 pub use comp::{
     comp_grid, comp_vertices, cosine_interp, cull_indices, hue_shades, plan_comp_passes, CompGrid,
     CompPass, COMP_GRID_X, COMP_GRID_Y,

@@ -7,7 +7,7 @@
 //!    [`Renderer::other_vs`]`(`[`Renderer::warp_target`]`)`) to black;
 //! 3. the warp pass ([`Renderer::warp_pass`]) into the warp target, with
 //!    its mips;
-//! 4. blur passes (Task 6.1), custom shapes, custom waves, the built-in
+//! 4. blur passes ([`Renderer::blur_passes`]), custom shapes, custom waves, the built-in
 //!    wave, sprites incl. `darken_center` and borders (Milestone 6), the
 //!    song title burn-in (6.7) — no-op hooks here, drawn into the warp
 //!    target (Milestone 6 must regenerate its mips after them: D3D9's
@@ -43,6 +43,7 @@ use crate::shader_params::{shader_uniforms, FrameShaderInputs, PresetShaderInput
 use crate::uniforms::VsParams;
 use crate::warp::{plan_warp_passes, snap_point, WarpPreset};
 use md_analysis::SoundData;
+use md_hlsl::PsVersion;
 use md_preset::Preset;
 
 /// Everything one frame draws (A.3 + F38 + the ledger Task 5.6 note).
@@ -239,14 +240,28 @@ impl Renderer {
         let snap = snap_point(blending, old_comp, new_comp);
         let old_warp = input.old_gpu.is_some_and(|g| g.warp.is_some());
         let last_warp = plan_warp_passes(blending, old_warp, input.gpu.warp.is_some());
-        let fixed_sampler = match last_warp.last().and_then(|p| p.shader) {
+        let mut fixed_sampler = match last_warp.last().and_then(|p| p.shader) {
             None if input.vars.wrap <= f64::from(snap) => SamplerKind::LinearClamp,
             _ => SamplerKind::LinearWrap,
         };
 
-        // 4. Blur passes (6.1), custom shapes (6.3), custom waves (6.4),
-        //    the wave (6.2), sprites/darken_center/borders (6.5), title
-        //    burn-in (6.7): Milestone 6.
+        // 4. Blur passes (milkdropfs.cpp:1051: `m_nMaxPSVersion > 0`); the
+        //    highest level any drawn shader samples (the old preset's too
+        //    while blending). They leave stage 0 clamped, which the
+        //    no-shader composite inherits. They write only the blur
+        //    textures, so main's mips (made by the warp pass) stay valid;
+        //    hooks that draw into main (6.2-6.5, 6.7) must regenerate them.
+        let highest = input
+            .gpu
+            .highest_blur()
+            .max(input.old_gpu.map_or(0, PresetGpu::highest_blur));
+        if self.settings.max_ps != PsVersion::None && highest > 0 {
+            self.blur_passes(&mut encoder, input.vars, highest);
+            fixed_sampler = SamplerKind::LinearClamp;
+        }
+        // Custom shapes (6.3), custom waves (6.4), the wave (6.2),
+        // sprites/darken_center/borders (6.5), title burn-in (6.7):
+        // Milestone 6.
 
         let comp = self.prepare_comp(input, &frame, snap, fixed_sampler);
         FrameCtx { encoder, comp }

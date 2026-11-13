@@ -142,6 +142,7 @@ pub struct Renderer {
     /// (the C++'s `m_lpVS[1]`); the other one is its source (`m_lpVS[0]`).
     pub(crate) vs_target: usize,
     pub(crate) blur: Vec<Texture2d>,
+    pub(crate) blur_gpu: Option<crate::blur::BlurGpu>,
     textures: TextureStore,
     pub(crate) pipelines: PipelineCache,
     shaders: ShaderCache,
@@ -220,6 +221,7 @@ impl Renderer {
             vs_target: 0,
             warp_buffers: None,
             blur,
+            blur_gpu: None,
             settings,
             gpu,
         })
@@ -346,8 +348,8 @@ impl Renderer {
         self.vs_target = Renderer::other_vs(self.vs_target);
     }
 
-    /// Blur texture `i` (0..6; presets read 1, 3, 5). Placeholders until
-    /// the blur passes (Task 6.1) render them.
+    /// Blur texture `i` (0..6; presets read 1, 3, 5), drawn by
+    /// [`Renderer::blur_passes`].
     pub fn blur_texture(&self, i: usize) -> &Texture2d {
         &self.blur[i]
     }
