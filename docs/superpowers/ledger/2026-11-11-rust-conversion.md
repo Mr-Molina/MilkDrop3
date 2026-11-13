@@ -424,3 +424,7 @@ Task 7.1: Ruling: mirror the C++ load-mode quirk (verified by the controller: st
 Task 7.1: Note: when a preset has no per_frame_init, q_values_after_init_code holds stale values from the CState slot's previous preset in the C++; Rust's 0 is the deliberate choice — cost if wrong: presets relying on stale q from an earlier preset differ (UB-like, not mirrored).
 Task 7.1: minor (deferred): C++ copies q_init into a wave/shape VM whose init fails to compile (state.cpp:1742, 1813) — Rust skips it, harmless; CoreError::Preset never constructed.
 Task 7.1: fix round 1/5 dispatched (Important: InitMode). Folded in: citation fixes (custom.rs ranges, 1615-1651, CState::Import); rand_pcg → dev-dependency.
+Task 7.1: fix round 1/5 (3 addressed, 0 open — InitMode Instant/Blended with tests; citations; rand_pcg dev-dep; commits a4eddbb..2c2ccca)
+Task 7.1: minor (deferred): blended_init_sees_nothing_loaded does not pin wave/shape q = 0 (q_init already 0 under Blended; a constant q1=5 would); stale "ImportFromFile" at state.rs:2.
+Task 7.1: Note (binds 7.5): pass InitMode::Instant(inputs) when blend_time is 0 (first preset, hard cuts) with progress from the OUTGOING preset's timers, else InitMode::Blended.
+Task 7.1: complete (commits 7aec2ef..8c892e4 + fix 2c2ccca, review clean after 1 fix round; controller gate: 703 passed, fmt/clippy/deny/native OK)
