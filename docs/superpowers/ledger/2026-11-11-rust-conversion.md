@@ -417,3 +417,4 @@ Task 6.9: fix round 1/5 (3 addressed, 0 open — golden CI step Linux-only with 
 Task 6.9: minor (deferred): ps2/noise_grain frame 60 is a saturated white Lissajous blob (weak baseline — re-check at 7.9); ci.yml:24 uses matrix.os where other steps use runner.os.
 Task 6.9: complete (commits c1f96e8..c10cfc9 + fix 3eccf20, review clean after 1 fix round; controller gate: 692 passed, golden_suite 2/2 in 252 s, fmt/clippy/deny/native OK)
 Controller: MILESTONE 6 COMPLETE (6.1-6.9 plus controller-ruled 6.1a single-level main textures and 6.7a single ortho projection). Next: Milestone 7 (md-core), Task 7.1.
+Task 7.1: dispatched (BASE 1e3b33a) — binding: md-core consumes md-render types (RotParams, PerFrameVars per F37/5.6 ruling), variable list verified against the C++ registration code, citation note
