@@ -340,3 +340,4 @@ Task 6.1a: dispatched (BASE 5495f26)
 Task 6.1a: implementer DONE (0231c9d) — default_60 golden unchanged; tests/warp.rs mips assertion replaced by single-level check
 Task 6.1a: minor (deferred): comment wrapping/grammar in frame.rs:9 and the blur/comp_fixed/fixed docs; dead generate_mips calls on main in test upload helpers.
 Task 6.1a: complete (commits ae111aa..0231c9d, review clean) — controller-ruled task, not in the plan's checklist.
+Task 6.2: dispatched (BASE b078627) — binding: F38, F40, Task 5.3 sampler note, Task 6.1a (no main mip regeneration)
