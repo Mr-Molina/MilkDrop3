@@ -395,6 +395,10 @@ impl Renderer {
     /// textures and build their pipelines. A shader that fails falls back
     /// to the built-in default, recorded in [`Renderer::last_errors`]
     /// (cleared first). Errs only if a default shader fails.
+    ///
+    /// This does NOT call `TextureStore::preset_loaded`: a direct caller
+    /// must do so once the load completes (md-core's `Switcher` does, through
+    /// its `ShaderLoader`).
     pub fn load_preset(&mut self, preset: &Preset) -> Result<PresetGpu, RenderError> {
         self.last_errors.clear();
         let shaders_on = self.settings.max_ps != PsVersion::None;

@@ -29,7 +29,7 @@ impl ShaderLoader for Fake {
         self.loaded += 1;
     }
     fn blend_geometry(&self) -> ((u32, u32), (f32, f32)) {
-        ((8, 8), (1.0, 1.0))
+        ((8, 8), (0.75, 1.0))
     }
 }
 
@@ -74,17 +74,14 @@ fn loud() -> SoundData {
 /// Load `p` and return the switcher with `a` already current (instant).
 fn with_current(tag: &str, f: &mut Fake, now: f32) -> Switcher<String> {
     let mut s = sw();
-    assert!(s
-        .load_preset(tagged(tag), 0.0, now, &InitInputs::default(), f, &mut rng())
-        .unwrap());
+    s.load_preset(tagged(tag), 0.0, now, &InitInputs::default(), f, &mut rng())
+        .unwrap();
     s
 }
 
 fn start_blend(s: &mut Switcher<String>, tag: &str, f: &mut Fake, now: f32) {
-    let ok = s
-        .load_preset(tagged(tag), 4.0, now, &InitInputs::default(), f, &mut rng())
+    s.load_preset(tagged(tag), 4.0, now, &InitInputs::default(), f, &mut rng())
         .unwrap();
-    assert!(ok);
 }
 
 fn run_ticks(s: &mut Switcher<String>, n: u32, f: &mut Fake, now: f32) {
@@ -241,24 +238,52 @@ fn preset_loaded_is_called_per_load() {
 }
 
 #[test]
-fn load_during_pending_is_ignored() {
+fn blended_load_during_pending_replaces_it_and_restarts_ticks() {
     let mut f = Fake::default();
     let mut s = with_current("a", &mut f, 0.0);
     start_blend(&mut s, "b", &mut f, 1.0);
     run_ticks(&mut s, 3, &mut f, 1.0);
-    let accepted = s
-        .load_preset(
-            tagged("c"),
-            4.0,
-            1.0,
-            &InitInputs::default(),
-            &mut f,
-            &mut rng(),
-        )
-        .unwrap();
-    assert!(!accepted);
-    run_ticks(&mut s, 5, &mut f, 1.0);
+    let compiled = f.compiled.len();
+    start_blend(&mut s, "c", &mut f, 1.0);
+    assert!(s.is_pending());
+    // Ticks restart at 1: seven calls leave it pending, the eighth lands.
+    run_ticks(&mut s, 7, &mut f, 1.0);
+    assert!(s.is_pending());
+    assert_eq!(s.current().unwrap().preset.warp_shader, "a");
+    run_ticks(&mut s, 1, &mut f, 1.0);
+    assert!(!s.is_pending());
+    assert_eq!(s.current().unwrap().preset.warp_shader, "c");
+    assert_eq!(s.old().unwrap().preset.warp_shader, "a");
+    // Recompiled: only "c" compiled after the replacement.
+    assert_eq!(f.compiled.len(), compiled + 1);
+    assert_eq!(f.compiled.last().unwrap().0, "c");
+}
+
+#[test]
+fn instant_load_during_pending_applies_at_once_and_pending_still_lands() {
+    let mut f = Fake::default();
+    let mut s = with_current("a", &mut f, 0.0);
+    start_blend(&mut s, "b", &mut f, 1.0);
+    run_ticks(&mut s, 3, &mut f, 1.0);
+    s.load_preset(
+        tagged("c"),
+        0.0,
+        2.0,
+        &InitInputs::default(),
+        &mut f,
+        &mut rng(),
+    )
+    .unwrap();
+    assert_eq!(s.current().unwrap().preset.warp_shader, "c");
+    assert!(s.is_pending(), "the pending load stays");
+    assert!(!s.is_blending());
+    assert!(s.old().is_none() && s.old_gpu().is_none());
+    run_ticks(&mut s, 5, &mut f, 3.0);
+    assert!(!s.is_pending());
     assert_eq!(s.current().unwrap().preset.warp_shader, "b");
+    // Blends away from the instant preset.
+    assert_eq!(s.old().unwrap().preset.warp_shader, "c");
+    assert_eq!(s.old_gpu().map(String::as_str), Some("c"));
 }
 
 #[test]
@@ -284,7 +309,8 @@ fn motion_vectors_freeze_on_the_old_preset_at_blend_start() {
     assert_eq!(old.mv_x.value(), 12.0);
     assert!(!old.mv_x.is_blending());
     // mv_a still fades.
-    assert!(new.mv_a.eval(1.0) >= 0.0);
+    assert_eq!(new.mv_a.value(), 0.0);
+    assert!(new.mv_a.is_blending());
 }
 
 #[test]
@@ -472,4 +498,39 @@ fn finish_pending_jumps_to_the_new_preset() {
     assert!(!s.is_pending());
     assert_eq!(s.current().unwrap().preset.warp_shader, "b");
     assert_eq!(s.gpu().map(String::as_str), Some("b"));
+}
+
+#[test]
+fn zero_blend_auto_can_emit_advance_and_hard_cut_in_one_frame() {
+    let mut f = Fake::default();
+    let mut s = with_current("a", &mut f, 0.0);
+    let mut r = rng();
+    let mut c = cfg();
+    c.blend_time_auto = 0.0;
+    s.update_timers(0.0, 30.0, 0, &quiet(), &c, &mut r);
+    let ev = s.update_timers(11.0, 30.0, 1, &loud(), &c, &mut r);
+    assert_eq!(
+        ev,
+        vec![
+            SwitchEvent::LoadRandom { blend_time: 0.0 },
+            SwitchEvent::LoadRandom { blend_time: 0.0 }
+        ]
+    );
+    // With a blended advance the hard cut is skipped (the load is pending).
+    let mut s = with_current("a", &mut f, 0.0);
+    s.update_timers(0.0, 30.0, 0, &quiet(), &cfg(), &mut r);
+    let ev = s.update_timers(13.0, 30.0, 1, &loud(), &cfg(), &mut r);
+    assert_eq!(ev, vec![SwitchEvent::LoadRandom { blend_time: 2.0 }]);
+}
+
+#[test]
+fn old_is_hidden_unless_blending() {
+    let mut f = Fake::default();
+    let mut s = with_current("a", &mut f, 0.0);
+    start_blend(&mut s, "b", &mut f, 1.0);
+    run_ticks(&mut s, 8, &mut f, 1.0);
+    assert!(s.old().is_some() && s.old_gpu().is_some());
+    s.update_timers(20.0, 30.0, 1, &quiet(), &cfg(), &mut rng());
+    assert!(!s.is_blending());
+    assert!(s.old().is_none() && s.old_gpu().is_none() && s.old_mut().is_none());
 }

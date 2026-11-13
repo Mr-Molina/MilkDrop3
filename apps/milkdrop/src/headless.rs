@@ -94,8 +94,10 @@ impl Headless {
         if let Some(dir) = args.preset.parent() {
             renderer.textures_mut().set_preset_dir(Some(dir));
         }
-        // `LoadPreset` also calls `preset_loaded()` inside `load_preset`.
+        // `load_preset` does not count the load; `preset_loaded()` does
+        // (`m_nPresetsLoadedTotal++`, plugin.cpp:7307).
         let pg = renderer.load_preset(&preset)?;
+        renderer.textures_mut().preset_loaded();
         let mut rng = Pcg32::seed_from_u64(args.seed);
         let (rand_preset, rot) = randomize_preset_vars(&mut rng);
         // milkdropfs.cpp:771-775: the first UpdateTime sets

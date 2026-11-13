@@ -14,18 +14,22 @@
 //! - `current` is an `Option`: before the first load the C++ holds
 //!   `INVALID_PRESET_DESC` and forces an instant load (plugin.cpp:7241-7243).
 //! - `load_preset` takes a parsed [`Preset`] ([`Switcher::load_path`] reads a
-//!   file); it returns `Ok(false)` for a load requested while one is
-//!   pending. The C++ guards only its two automatic callers (milkdropfs.cpp:
-//!   784, 832); a user load would restart the pending one (plugin.cpp:
-//!   7295). Ignoring every such request is the ruling.
+//!   file). Only the automatic callers skip while a load is pending
+//!   (milkdropfs.cpp:784, 832, in [`Switcher::update_timers`]); a direct
+//!   load never does. A blended one replaces the pending load and restarts
+//!   its ticks (plugin.cpp:7285-7298); an instant one applies at once and
+//!   leaves the pending load in place, which still lands at tick 8 and
+//!   blends away from the instant preset.
 //! - The blend pattern lives here (`blend_pattern`, sized from
 //!   [`ShaderLoader::blend_geometry`]) and is passed to
 //!   `WarpMesh::compute_uvs`; the renderer's own `WarpMesh` keeps only the
 //!   unblended `a = 1, c = 0` it was built with.
 //! - Not ported here: the warp/comp shader locks (`ApplyFlags`,
 //!   plugin.cpp:7255-7257, 7290-7291), the history, the "preset not found"
-//!   UI message, and the `m_fHardCutThresh *= 2` after a user step
-//!   (plugin.cpp:6191, 6471; [`Switcher::bump_hard_cut_thresh`]).
+//!   UI message. The `m_fHardCutThresh *= 2` after a user step
+//!   (plugin.cpp:6191, 6471) is dead code: it hits the member, while
+//!   `RenderFrame` reads the function-static of the same name
+//!   (milkdropfs.cpp:825), so it is not ported.
 
 use crate::error::CoreError;
 use crate::state::{InitInputs, InitMode, PresetState};
@@ -117,22 +121,26 @@ impl<G> Switcher<G> {
     pub fn current_mut(&mut self) -> Option<&mut PresetState> {
         self.current.as_mut()
     }
-    /// `m_pOldState`: the previous preset (blended from while
-    /// [`Switcher::is_blending`]).
+    /// `m_pOldState`, only while [`Switcher::is_blending`]: the preset being
+    /// blended from. (An instant load keeps the previous preset internally,
+    /// as the C++ keeps `m_pOldState`, but it is not exposed.)
     pub fn old(&self) -> Option<&PresetState> {
-        self.old.as_ref()
+        self.old.as_ref().filter(|_| self.is_blending())
     }
     pub fn old_mut(&mut self) -> Option<&mut PresetState> {
-        self.old.as_mut()
+        if self.is_blending() {
+            self.old.as_mut()
+        } else {
+            None
+        }
     }
     pub fn gpu(&self) -> Option<&G> {
         self.gpu.as_ref()
     }
-    /// `m_OldShaders`. Hand it to the renderer only while
-    /// [`Switcher::is_blending`] (an instant load leaves it set, as the C++
-    /// leaves `m_OldShaders`, without a blend).
+    /// `m_OldShaders`, only while [`Switcher::is_blending`] (hand it to the
+    /// renderer as `old_gpu`).
     pub fn old_gpu(&self) -> Option<&G> {
-        self.old_gpu.as_ref()
+        self.old_gpu.as_ref().filter(|_| self.is_blending())
     }
     /// The blend pattern for `WarpMesh::compute_uvs`.
     pub fn blend_pattern(&self) -> &[VertInfo] {
@@ -157,12 +165,6 @@ impl<G> Switcher<G> {
     pub fn hard_cut_thresh(&self) -> f32 {
         self.timers.hard_cut_thresh
     }
-    /// `m_fHardCutThresh *= 2` after a user-driven step (plugin.cpp:6191,
-    /// 6471).
-    pub fn bump_hard_cut_thresh(&mut self) {
-        self.timers.hard_cut_thresh *= 2.0;
-    }
-
     /// `progress` (milkdropfs.cpp:494): `(now - start) / (next - start)`.
     pub fn progress(&self, now: f32) -> f32 {
         self.timers.progress(now)
@@ -182,7 +184,9 @@ impl<G> Switcher<G> {
 
     /// Per frame, before the per-frame equations (`RenderFrame`,
     /// milkdropfs.cpp:765-850): timers, `m_fBlendProgress` and the blend
-    /// end, auto-advance and hard cuts. The caller loads what the events ask
+    /// end, auto-advance and hard cuts. Call it only on frames that are not
+    /// redraws (milkdropfs.cpp:777, plugin.cpp:3917-3919). The caller loads
+    /// what the events ask
     /// for. `frame` is `GetFrame()`; `sound.imm_rel` feeds the hard cut.
     pub fn update_timers(
         &mut self,
@@ -222,7 +226,11 @@ impl<G> Switcher<G> {
                 blend_time: cfg.blend_time_auto,
             });
         }
-        if out.hard_cut && !self.is_pending() && events.is_empty() {
+        // The C++ guard reads m_nLoadingPreset right after the advance's
+        // LoadRandomPreset: a blended advance has made it pending, so the
+        // hard cut skips; with blend_time_auto == 0 both loads fire.
+        let advance_pends = !events.is_empty() && cfg.blend_time_auto != 0.0;
+        if out.hard_cut && !self.is_pending() && !advance_pends {
             events.push(SwitchEvent::LoadRandom { blend_time: 0.0 });
         }
         events
@@ -230,8 +238,8 @@ impl<G> Switcher<G> {
 
     /// `LoadPreset` (plugin.cpp:7203-7299) for a parsed preset. `inputs` are
     /// the live values an instant load's init code sees (`progress` is
-    /// replaced by the outgoing preset's, Task 7.1). Returns `Ok(false)`
-    /// when a load is already pending (the request is dropped).
+    /// replaced by the outgoing preset's, Task 7.1). A load while one is
+    /// pending is accepted (see the module docs).
     ///
     /// Blend time 0, or no valid current preset, swaps at once
     /// (`InitMode::Instant`, plugin.cpp:7245-7281): no ticks and no blend.
@@ -245,10 +253,7 @@ impl<G> Switcher<G> {
         inputs: &InitInputs,
         loader: &mut impl ShaderLoader<Gpu = G>,
         rng: &mut impl Rng,
-    ) -> Result<bool, CoreError> {
-        if self.pending.is_some() {
-            return Ok(false);
-        }
+    ) -> Result<(), CoreError> {
         let blend_time = if self.current.is_none() {
             0.0
         } else {
@@ -279,6 +284,9 @@ impl<G> Switcher<G> {
                 rng,
                 &InitMode::Blended,
             )?;
+            // A blended request replaces a pending one and restarts the tick
+            // count (plugin.cpp:7285-7298); the C++ leaks the old pending
+            // state's shaders there, which is not mirrored.
             self.pending = Some(Pending {
                 state,
                 blend_time,
@@ -286,7 +294,7 @@ impl<G> Switcher<G> {
                 gpu: None,
             });
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Read and parse `path`, then [`Switcher::load_preset`]. A missing or
@@ -300,7 +308,7 @@ impl<G> Switcher<G> {
         inputs: &InitInputs,
         loader: &mut impl ShaderLoader<Gpu = G>,
         rng: &mut impl Rng,
-    ) -> Result<bool, CoreError> {
+    ) -> Result<(), CoreError> {
         let bytes = std::fs::read(path)
             .map_err(|e| CoreError::Preset(format!("{}: {e}", path.display())))?;
         let preset = parse_milk(&String::from_utf8_lossy(&bytes))
@@ -334,7 +342,10 @@ impl<G> Switcher<G> {
 
     /// Tick 8 (plugin.cpp:7320-7352): swap the states and shaders,
     /// randomize the blend pattern, start the blend, reset the preset
-    /// timers. Also what the C++ does to jump to the new preset when the
+    /// timers. The C++ device-reset path (plugin.cpp:3768-3774) also forces
+    /// `m_bBlending = false` right after; 7.9 must do that
+    /// (`current_mut().preset.transition.blending = false`). Also what the
+    /// C++ does to jump to the new preset when the
     /// device is reset (plugin.cpp:3768-3771); shaders not yet compiled
     /// are compiled here (the C++ would run with none). No-op without a
     /// pending load.
