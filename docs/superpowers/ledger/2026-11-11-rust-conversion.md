@@ -353,3 +353,6 @@ Task 6.3: Ruling (amends the 6.3 FrameInput ruling, confirmed by review at mfs:2
 Task 6.3: minor (deferred): per-frame/per-instance Vec allocations; report citations off.
 Task 6.3: fix round 1/5 dispatched (Important 1 citations). Folded in: C++ (int) cast semantics via md-eval's eel_int for textured/additive/thick/sides/colour clamps; tests for additive blend choice and aspect_y≠1 UVs.
 Controller: Note (binds all later dispatches): implementers must verify every C++ line citation with `grep -n`/`sed -n` before committing — 6.2 and 6.3 both shipped citations off by 20-30 lines.
+Task 6.3: fix round 1/5 (3 addressed, 0 open — citations re-verified; c_int (int)-cast parity; additive/aspect tests; commits e262568..7499745)
+Task 6.3: minor (deferred): c_int duplicates md-eval's eel_int (no md-render→md-eval edge); two comment-wording nits.
+Task 6.3: complete (commits d35cba9..b9660ee + fix 7499745, review clean after 1 fix round; controller gate: 619 passed, fmt/clippy/deny/native OK)
