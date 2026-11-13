@@ -58,10 +58,16 @@ pub(crate) fn fold(key: &str) -> String {
 
 impl<T> TexCache<T> {
     pub fn new() -> TexCache<T> {
+        TexCache::starting_at(0)
+    }
+
+    /// An empty cache whose ids start at `first_id` (a second cache whose
+    /// handles must not collide with another's).
+    pub fn starting_at(first_id: u32) -> TexCache<T> {
         TexCache {
             entries: HashMap::new(),
             by_key: HashMap::new(),
-            next_id: 0,
+            next_id: first_id,
             generation: 0,
             max_images: MAX_IMAGES,
             max_bytes: MAX_BYTES,
@@ -81,6 +87,17 @@ impl<T> TexCache<T> {
     /// The cached id for `key` without touching its age.
     pub fn peek(&self, key: &str) -> Option<TextureId> {
         self.by_key.get(&fold(key)).map(|&id| TextureId(id))
+    }
+
+    /// Drop the entry `id` (a stale handle afterwards); `false` if absent.
+    pub fn remove(&mut self, id: TextureId) -> bool {
+        match self.entries.remove(&id.0) {
+            Some(e) => {
+                self.by_key.remove(&e.key);
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn get(&self, id: TextureId) -> Option<&T> {

@@ -18,7 +18,10 @@
 //!    ([`crate::comp`]), then the song title animation
 //!    ([`Renderer::draw_title_anim`], 6.7) and the text pass queued by
 //!    [`Renderer::flush_text`] (6.6) drawn over it in the composite
-//!    intermediate, user sprites in between (a Milestone 6 hook), one submit, and the ping-pong swap
+//!    intermediate, with the user sprites ([`Renderer::draw_sprites`], 6.8)
+//!    between them (the C++'s order: title animation, `DrawUserSprites`,
+//!    then text; burnt sprites go into the warp target after the
+//!    composite), one submit, and the ping-pong swap
 //!    ([`Renderer::swap_vs`]).
 //!
 //! Uniforms go through `Queue::write_buffer`, so each preset program is
@@ -190,6 +193,10 @@ pub struct FrameCtx<'a> {
     /// The title animation's screen-mode draws (6.7), drawn after the
     /// composite and under the text.
     pub(crate) title: Vec<crate::title::TitleDraw>,
+    /// User sprites recorded by [`Renderer::draw_sprites`] (6.8), drawn
+    /// after the title animation and under the text, their burns into the
+    /// warp target.
+    pub(crate) sprites: Vec<crate::sprites_draw::SpriteDraw>,
 }
 
 impl std::fmt::Debug for FrameCtx<'_> {
@@ -305,7 +312,7 @@ impl Renderer {
         self.draw_wave(&mut encoder, input);
         // DrawSprites (1057): darken_center, then the borders (6.5). The
         // user sprites are a later pass (DrawUserSprites, after the
-        // composite). Title burn-in (6.7): Milestone 6.
+        // composite and the title animation: 6.8).
         self.draw_sprites_fixed(&mut encoder, input.vars);
         // The title burn-in (6.7, mfs:1059-1067): the frame its progress
         // reaches 1, into the warp target.
@@ -320,6 +327,7 @@ impl Renderer {
             text: Vec::new(),
             text_under: Vec::new(),
             title: Vec::new(),
+            sprites: Vec::new(),
         };
         // The on-screen draw (6.7, mfs:1123-1129), after the composite.
         if let Some(progress) = title.screen {
@@ -431,11 +439,18 @@ impl Renderer {
             text,
             text_under,
             title,
+            sprites,
         } = ctx;
-        self.record_comp(&mut encoder, &comp, &title, (&text_under, &text), target);
-        // User sprites (Milestone 6) go here. They are fixed-function
-        // draws: build them in the C++'s pre-projection coordinates and the
-        // fixed shaders' ortho projection flips y (Task 6.7a).
+        // The composite pass draws, in the C++'s order, the title animation,
+        // the user sprites (6.8), then the text; burnt sprites follow into
+        // the warp target.
+        self.record_comp(
+            &mut encoder,
+            &comp,
+            (&title, &sprites),
+            (&text_under, &text),
+            target,
+        );
         self.gpu.queue().submit([encoder.finish()]);
         self.swap_vs();
         self.frames_since_resize = self.frames_since_resize.saturating_add(1);

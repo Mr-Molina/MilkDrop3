@@ -188,3 +188,57 @@ fn channel(v: u32, m: u32, alpha: bool) -> u8 {
     let max = (1u64 << m.count_ones()) - 1;
     ((x * 255 + max / 2) / max) as u8
 }
+
+/// The colour key of `D3DXCreateTextureFromFileEx` as `texmgr::LoadTex`
+/// passes it, `0xFF000000 | ck` (texmgr.cpp:109): every pixel whose ARGB
+/// equals the key exactly becomes transparent black (`0x00000000`). One
+/// packed colour, not a range (plugin.cpp:142-144: the old `colorkey_lo` /
+/// `colorkey_hi` pair "have been replaced with just one setting"), and the
+/// key's alpha is forced to `0xFF`, so only fully opaque pixels can match.
+/// `ck == 0` is therefore not "off": opaque black is keyed.
+pub fn apply_colorkey(img: &mut RgbaImage, colorkey: u32) {
+    let key = colorkey & 0x00FF_FFFF;
+    for p in img.pixels_mut() {
+        let [r, g, b, a] = p.0;
+        if a == 255 && u32::from_be_bytes([0, r, g, b]) == key {
+            p.0 = [0; 4];
+        }
+    }
+}
+
+#[cfg(test)]
+mod colorkey_tests {
+    use super::*;
+    use image::Rgba;
+
+    #[test]
+    fn colorkey_is_an_exact_packed_match_on_opaque_pixels() {
+        // D3DXCreateTextureFromFileEx's ColorKey = 0xFF000000 | ck: an exact
+        // ARGB match becomes transparent black (texmgr.cpp:109).
+        let mut img = RgbaImage::new(5, 1);
+        let key = 0x0010_2030_u32;
+        let px = [
+            [0x10, 0x20, 0x30, 255], // the key: keyed out
+            [0x10, 0x20, 0x31, 255], // one off: kept
+            [0x10, 0x20, 0x30, 128], // translucent, so ARGB differs: kept
+            [0x30, 0x20, 0x10, 255], // swapped channels: kept
+            [0x00, 0x00, 0x00, 255], // black, not the key: kept
+        ];
+        for (x, p) in px.iter().enumerate() {
+            img.put_pixel(x as u32, 0, Rgba(*p));
+        }
+        apply_colorkey(&mut img, key);
+        assert_eq!(img.get_pixel(0, 0).0, [0, 0, 0, 0]);
+        for x in 1..5 {
+            assert_eq!(img.get_pixel(x, 0).0, px[x as usize], "pixel {x}");
+        }
+        // The alpha byte of `ck` is ORed with 0xFF, so it cannot matter.
+        let mut img2 = RgbaImage::from_pixel(1, 1, Rgba([0x10, 0x20, 0x30, 255]));
+        apply_colorkey(&mut img2, 0x7F10_2030);
+        assert_eq!(img2.get_pixel(0, 0).0, [0, 0, 0, 0]);
+        // The default key 0 keys opaque black (0xFF000000 is not "off").
+        let mut img3 = RgbaImage::from_pixel(1, 1, Rgba([0, 0, 0, 255]));
+        apply_colorkey(&mut img3, 0);
+        assert_eq!(img3.get_pixel(0, 0).0, [0, 0, 0, 0]);
+    }
+}

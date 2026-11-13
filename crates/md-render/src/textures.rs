@@ -22,13 +22,14 @@
 //! whatever the sampler's prefix — see [`RandPicks`].
 
 use crate::gpu::Gpu;
-use crate::image_load::{load_image, ImageError};
+use crate::image_load::{apply_colorkey, load_image, ImageError};
 use crate::noise::{
     dwords_to_rgba8, noise_2d, noise_3d, NOISE_2D, NOISE_2D_MIPS, NOISE_3D, NOISE_3D_MIPS,
 };
 use crate::texcache::{fold, TexCache, TextureId, TEXTURE_OVERHEAD_BYTES};
 use crate::texture::{Texture2d, Texture3d};
 use rand_core::{Rng, SeedableRng};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 /// File extensions tried, in order (`texture_exts`, plugin.cpp:2847 —
@@ -127,6 +128,10 @@ pub fn pick_random_texture<R: Rng + ?Sized>(
     Some(pool[rng.next_u32() as usize % pool.len()].clone())
 }
 
+/// The first [`TextureId`] of sprite textures, which live in their own
+/// cache so the eviction budget never touches them.
+const SPRITE_ID_BASE: u32 = 1 << 31;
+
 /// A noise texture of the store.
 struct Noise<T> {
     name: &'static str,
@@ -137,6 +142,8 @@ struct Noise<T> {
 /// Disk textures, noise textures and random-texture candidates.
 pub struct TextureStore {
     cache: TexCache<Texture2d>,
+    sprites: TexCache<Texture2d>,
+    warned_sprites: HashSet<String>,
     textures_dir: Option<PathBuf>,
     preset_dir: Option<PathBuf>,
     random_names: Vec<String>,
@@ -173,6 +180,8 @@ impl TextureStore {
             .collect();
         TextureStore {
             cache: TexCache::new(),
+            sprites: TexCache::starting_at(SPRITE_ID_BASE),
+            warned_sprites: HashSet::new(),
             textures_dir: None,
             preset_dir: None,
             random_names: Vec::new(),
@@ -255,9 +264,75 @@ impl TextureStore {
         Ok(self.cache.insert(root, tex, bytes))
     }
 
-    /// A texture by handle; `None` once evicted.
+    /// A sprite's image (`LaunchSprite` -> `texmgr::LoadTex`,
+    /// plugin.cpp:8567-8713, texmgr.cpp:70-135): the file at `path` (the
+    /// caller joins relative names with the MilkDrop2 directory,
+    /// plugin.cpp:8589-8594), decoded, with `colorkey` applied
+    /// ([`apply_colorkey`]: `colorkey_lo`/`colorkey` of the sprite's INI
+    /// section, default 0) and uploaded with a full mip chain
+    /// (`D3DXCreateTextureFromFileEx`, `MipLevels = D3DX_DEFAULT`).
+    ///
+    /// Sprite textures live outside the eviction budget (the C++ keeps them
+    /// in `texmgr`, not the texture cache) until [`TextureStore::kill_sprite`].
+    /// A path already loaded (compared case-insensitively) returns the
+    /// existing texture with its original colour key, as `LoadTex` instances
+    /// an already-loaded file (texmgr.cpp:76-87).
+    ///
+    /// On failure no sprite exists: the C++ shows an error and `LaunchSprite`
+    /// returns false (plugin.cpp:8667-8712), and `DrawUserSprites` skips
+    /// slots without a surface (milkdropfs.cpp:3474). The failure is logged
+    /// (a `tracing` warning) once per path.
+    pub fn load_sprite(
+        &mut self,
+        gpu: &Gpu,
+        path: &Path,
+        colorkey: u32,
+    ) -> Result<TextureId, TextureError> {
+        let name = path.to_string_lossy();
+        if let Some(id) = self.sprites.lookup(&name) {
+            return Ok(id);
+        }
+        let max = gpu.device().limits().max_texture_dimension_2d;
+        let loaded = match load_image(path) {
+            Ok(img) if img.width() > max || img.height() > max => Err(TextureError::TooLarge {
+                path: path.to_owned(),
+                w: img.width(),
+                h: img.height(),
+                max,
+            }),
+            Ok(img) => Ok(img),
+            Err(e) => Err(e.into()),
+        };
+        let mut img = match loaded {
+            Ok(img) => img,
+            Err(e) => {
+                if self.warned_sprites.insert(fold(&name)) {
+                    tracing::warn!(sprite = %name, error = %e,
+                        "sprite image cannot be loaded; the sprite is not created");
+                }
+                return Err(e);
+            }
+        };
+        apply_colorkey(&mut img, colorkey);
+        let (w, h) = img.dimensions();
+        let tex = Texture2d::from_rgba8(gpu, w, h, img.as_raw(), true);
+        let bytes = u64::from(w) * u64::from(h) * 4 + TEXTURE_OVERHEAD_BYTES;
+        Ok(self.sprites.insert(&name, tex, bytes))
+    }
+
+    /// `KillTex`: drop the sprite texture `id` (its handle goes stale, and
+    /// a later [`TextureStore::load_sprite`] of the path decodes again).
+    pub fn kill_sprite(&mut self, id: TextureId) {
+        self.sprites.remove(id);
+    }
+
+    /// A texture by handle; `None` once evicted (or killed, for a sprite).
     pub fn texture(&self, id: TextureId) -> Option<&Texture2d> {
-        self.cache.get(id)
+        if id.0 >= SPRITE_ID_BASE {
+            self.sprites.get(id)
+        } else {
+            self.cache.get(id)
+        }
     }
 
     /// The 2D texture a sampler root binds: a noise texture, else the disk

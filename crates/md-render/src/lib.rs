@@ -43,6 +43,9 @@
 //!
 //! Task 6.5: motion vectors, borders and the darken-centre fan
 //! ([`build_motion_vectors`], [`build_borders`], [`build_darken_center`]).
+//!
+//! Task 6.8: image sprites ([`SpriteFrame`], [`Renderer::draw_sprites`],
+//! [`TextureStore::load_sprite`]).
 #![forbid(unsafe_code)]
 
 mod blend;
@@ -74,6 +77,8 @@ mod shader_cache;
 mod shader_params;
 mod shapes;
 mod shapes_draw;
+mod sprites;
+mod sprites_draw;
 mod tex_size;
 mod texcache;
 mod text_draw;
@@ -105,7 +110,7 @@ pub use fixed::{fan_to_list, points_to_quads, FixedMode, SamplerKind, Topo};
 pub use frame::{FrameCtx, FrameInput};
 pub use frame_vars::PerFrameVars;
 pub use gpu::{gpu_or_skip, headless_device, headless_gpu, Gpu};
-pub use image_load::{load_image, ImageError};
+pub use image_load::{apply_colorkey, load_image, ImageError};
 pub use mesh::{
     mesh_aspect, PerPixelRunner, PerPixelVars, VertInfo, WarpMesh, MAX_GRID_X, MAX_GRID_Y,
 };
@@ -131,6 +136,7 @@ pub use shader_params::{
     FrameShaderInputs, PresetShaderInputs, RotParams,
 };
 pub use shapes::{build_shape, ShapeFrameVars, ShapeGeometry, ShapeView};
+pub use sprites::{sprite_color, sprite_quads, sprite_state, SpriteFrame, SpriteQuads, SpriteVars};
 pub use tex_size::{blur_texture_sizes, main_texture_size, TexSize};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use text_pass::{FontId, TextQueue, DARK_TRANSLUCENT_BOX, FONT_SLOTS};

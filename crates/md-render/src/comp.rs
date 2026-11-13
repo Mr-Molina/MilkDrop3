@@ -348,7 +348,10 @@ impl Renderer {
         &mut self,
         enc: &mut wgpu::CommandEncoder,
         frame: &CompFrame,
-        title: &[crate::title::TitleDraw],
+        over: (
+            &[crate::title::TitleDraw],
+            &[crate::sprites_draw::SpriteDraw],
+        ),
         text: (&[crate::text_draw::TextDraw], &[crate::text_draw::TextDraw]),
         target: &wgpu::TextureView,
     ) {
@@ -400,12 +403,27 @@ impl Renderer {
                 (CompPass::Shader { .. }, None) => {}
             }
         }
-        // The title animation over the composite (6.7, mfs:1123-1126), then
-        // text and boxes over it (6.6; DrawNow runs after
-        // MyRenderFn, pluginshell.cpp:1393-1405), before the copy.
-        Renderer::record_title(&mut batch, title, format);
+        // The title animation over the composite (6.7, mfs:1123-1126), the
+        // user sprites (6.8, :1131), then text and boxes over them (6.6;
+        // DrawNow runs after MyRenderFn, pluginshell.cpp:1393-1405), before
+        // the copy. The sprites inherit stage 0's sampler: linear/wrap after
+        // a shader composite (RestoreShaderParams), else the fixed path's.
+        let sprite_sampler = match frame.passes.last() {
+            Some((CompPass::Shader { .. }, _)) => SamplerKind::LinearWrap,
+            _ => frame.fixed_sampler,
+        };
+        Renderer::record_title(&mut batch, over.0, format);
+        Renderer::record_sprites(&mut batch, over.1, format, sprite_sampler);
         Renderer::record_text(&mut batch, text.0, text.1, format);
         batch.finish();
+        // Burnt sprites go into the warp target after the composite read it.
+        Renderer::record_sprite_burns(
+            (&self.gpu, &mut self.pipelines, &mut self.dynbuf),
+            &self.vs[main],
+            enc,
+            over.1,
+            sprite_sampler,
+        );
 
         // Copy to the caller's target (its texture's format and size).
         let t = target.texture();
