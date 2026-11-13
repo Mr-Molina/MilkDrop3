@@ -32,6 +32,8 @@
 //! path ([`fixed_comp_draws`]), and [`Renderer::resize`] (clamped, F56).
 //!
 //! Task 6.1: the blur chain ([`Renderer::blur_passes`], [`blur_scale_bias`]).
+//!
+//! Task 6.2: the built-in waveform ([`build_wave`], drawn by the frame loop).
 #![forbid(unsafe_code)]
 
 mod blend;
@@ -63,6 +65,8 @@ mod textures;
 mod uniforms;
 mod vertex;
 mod warp;
+mod wave;
+mod wave_draw;
 
 pub use blend::BlendMode;
 pub use blendpattern::{blend_pattern, frand, gen_plasma, randomize_blend_pattern, BlendPattern};
@@ -110,6 +114,10 @@ pub use vertex::{vertices_to_bytes, Vertex};
 pub use warp::{
     decay_byte, plan_warp_passes, snap_point, warp_geometry, Cull, WarpGeometry, WarpPassPlan,
     WarpPreset,
+};
+pub use wave::{
+    build_wave, scaled_wave, smooth_wave, WaveBlend, WaveGeometry, WaveParams, WaveView,
+    NUM_WAVEFORM_SAMPLES, NUM_WAVES,
 };
 
 pub use image::RgbaImage;

@@ -8,7 +8,7 @@
 //! 3. the warp pass ([`Renderer::warp_pass`]) into the warp target, with
 //!    (single-level, as in the C++: no mip generation anywhere in the frame);
 //! 4. blur passes ([`Renderer::blur_passes`]), custom shapes, custom waves, the built-in
-//!    wave, sprites incl. `darken_center` and borders (Milestone 6), the
+//!    wave ([`Renderer::draw_wave`], 6.2), sprites incl. `darken_center` and borders (Milestone 6), the
 //!    song title burn-in (6.7) — no-op hooks here, drawn into the warp
 //!    target (no mips to regenerate: the main textures have one level);
 //! 5. ([`Renderer::present`]) the composite into the caller's target
@@ -258,8 +258,11 @@ impl Renderer {
             self.blur_passes(&mut encoder, input.vars, highest);
             fixed_sampler = SamplerKind::LinearClamp;
         }
-        // Custom shapes (6.3), custom waves (6.4), the wave (6.2),
-        // sprites/darken_center/borders (6.5), title burn-in (6.7):
+        // Custom shapes (6.3) and custom waves (6.4): Milestone 6. Then
+        // the built-in wave (DrawWave, after them so it draws over them,
+        // milkdropfs.cpp:1054-1056), into the warp target.
+        self.draw_wave(&mut encoder, input);
+        // Sprites/darken_center/borders (6.5), title burn-in (6.7):
         // Milestone 6.
 
         let comp = self.prepare_comp(input, &frame, snap, fixed_sampler);
