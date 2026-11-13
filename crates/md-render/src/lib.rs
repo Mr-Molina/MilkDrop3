@@ -34,6 +34,9 @@
 //! Task 6.1: the blur chain ([`Renderer::blur_passes`], [`blur_scale_bias`]).
 //!
 //! Task 6.2: the built-in waveform ([`build_wave`], drawn by the frame loop).
+//!
+//! Task 6.3: custom shapes ([`build_shape`], [`ShapeFrameVars`] in
+//! [`FrameInput::shapes`]).
 #![forbid(unsafe_code)]
 
 mod blend;
@@ -58,6 +61,8 @@ mod readback;
 mod renderer;
 mod shader_cache;
 mod shader_params;
+mod shapes;
+mod shapes_draw;
 mod tex_size;
 mod texcache;
 mod texture;
@@ -102,6 +107,7 @@ pub use shader_params::{
     random_rot_matrix, randomize_preset_vars, safe_blur_min_max, shader_uniforms,
     FrameShaderInputs, PresetShaderInputs, RotParams,
 };
+pub use shapes::{build_shape, ShapeFrameVars, ShapeGeometry, ShapeView};
 pub use tex_size::{blur_texture_sizes, main_texture_size, TexSize};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
