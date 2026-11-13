@@ -428,3 +428,4 @@ Task 7.1: fix round 1/5 (3 addressed, 0 open — InitMode Instant/Blended with t
 Task 7.1: minor (deferred): blended_init_sees_nothing_loaded does not pin wave/shape q = 0 (q_init already 0 under Blended; a constant q1=5 would); stale "ImportFromFile" at state.rs:2.
 Task 7.1: Note (binds 7.5): pass InitMode::Instant(inputs) when blend_time is 0 (first preset, hard cuts) with progress from the OUTGOING preset's timers, else InitMode::Blended.
 Task 7.1: complete (commits 7aec2ef..8c892e4 + fix 2c2ccca, review clean after 1 fix round; controller gate: 703 passed, fmt/clippy/deny/native OK)
+Task 7.2: dispatched (BASE 16aa0f4) — binding: F37 (fill md-render's PerFrameVars/PerPixelVars/PerPixelRunner), Task 5.6 notes (compute_uvs uses ABSOLUTE clock; old preset's per-pixel during blends), 6.5 (blended vars mfs:706-733), Task 2.5 (mv freeze belongs to 7.5), Task 7.1 InitMode
