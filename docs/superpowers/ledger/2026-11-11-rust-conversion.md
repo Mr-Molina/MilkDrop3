@@ -345,3 +345,4 @@ Task 6.2: implementer DONE_WITH_CONCERNS (0161080) — smoothing recursive with 
 Task 6.2: review — Approved, 0 Critical / 0 Important; departures (a)-(d) upheld against milkdropfs.cpp:850-858, 2715-2717, 3233.
 Task 6.2: minor (deferred): many wrong C++ line citations (wave.rs module table, dupe/clip/switch comments, wave_draw.rs "3178" = 3233, two in tests); file nWaveMode 8 hits C++ case 8 but draws nothing in Rust (allowed by F40 — add a comment); NaN alpha / empty smooth_wave input differ from C++ UB (documented); no vertex-formula tests for modes 1,3,4,5; no CPU RED, wave.rs 622 lines, RawWave.alpha needlessly pub, usize_ closure; stale "black until the wave" comment in golden_basic.rs.
 Task 6.2: complete (commits aff10d6..0161080, review clean; controller gate: 607 passed, fmt/clippy/deny/native OK)
+Task 6.3: dispatched (BASE 875b240)
