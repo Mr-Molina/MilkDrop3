@@ -899,6 +899,17 @@ dependencies = [
 [[package]]
 name = "milkdrop"
 version = "0.1.0"
+dependencies = [
+ "image",
+ "md-analysis",
+ "md-audio",
+ "md-preset",
+ "md-render",
+ "md-testkit",
+ "rand_core",
+ "rand_pcg",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "miniz_oxide"
