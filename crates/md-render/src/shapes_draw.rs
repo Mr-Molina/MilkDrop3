@@ -10,10 +10,10 @@ use crate::renderer::Renderer;
 use crate::shapes::{build_shape, ShapeFrameVars, ShapeView};
 
 impl Renderer {
-    /// `DrawCustomShapes` (milkdropfs.cpp:2215-2395): the new preset's
+    /// `DrawCustomShapes` (milkdropfs.cpp:2215-2398): the new preset's
     /// shapes, then, while `input.blending()`, the old preset's (`rep` 0 and
-    /// 1, 2217-2223), with `alpha_mult` = `blend_t` and `1 - blend_t`
-    /// (2224-2226). They draw into the warp target (`m_lpVS[1]`) and a
+    /// 1, 2224-2227), with `alpha_mult` = `blend_t` and `1 - blend_t`
+    /// (2228-2230). They draw into the warp target (`m_lpVS[1]`) and a
     /// textured shape samples the warp *source* (`m_lpVS[0]`, 2330), which
     /// is a different texture, so there is no feedback hazard. `sampler` is
     /// the stage-0 state the draw inherits (nothing in the function sets
@@ -70,7 +70,7 @@ impl Renderer {
                 };
                 let key = PipelineKey::new(mode, blend, Topo::TriFan, format);
                 batch.draw(key, &fill, tex, sampler);
-                // A LINESTRIP of `sides` segments per copy (2360).
+                // A LINESTRIP of `sides` segments per copy (2383).
                 let key = PipelineKey::new(FixedMode::Color, blend, Topo::LineStrip, format);
                 for copy in border.chunks(geo.sides + 1) {
                     batch.draw(key, copy, None, SamplerKind::LinearClamp);

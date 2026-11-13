@@ -50,7 +50,7 @@ fn build(v: &ShapeFrameVars) -> (Vec<Vertex>, Vec<Vertex>) {
 
 #[test]
 fn sides_clamped_to_100() {
-    // milkdropfs.cpp:2262-2264: (int)sides clamped to [3, 100]; the fan
+    // milkdropfs.cpp:2288-2290: (int)sides clamped to [3, 100]; the fan
     // has sides + 2 vertices.
     assert_eq!(
         build(&ShapeFrameVars {
@@ -98,7 +98,7 @@ fn fan_has_sides_plus_2_vertices() {
         ..shape()
     });
     assert_eq!(fill.len(), 8);
-    // v[sides + 1] = v[1] (2297), the centre is v[0] at (2x-1, -2y+1).
+    // v[sides + 1] = v[1] (2325), the centre is v[0] at (2x-1, -2y+1).
     assert_eq!(fill[7], fill[1]);
     assert_eq!(fill[0].pos, [0.0, 0.0, 0.0]);
     // Ring vertex 1 is at angle PI/4 (ang = 0), radius 0.3, aspect 1.
@@ -123,9 +123,19 @@ fn textured_uv_center_is_half_half() {
         ..shape()
     });
     assert_eq!(&fill[0].uv[..2], &[0.5, 0.5]);
-    // Ring vertex 1: 0.5 + 0.5 cos(PI/4) / zoom * aspect_y (2285-2286).
+    // Ring vertex 1: u = 0.5 + 0.5 cos(PI/4) / zoom * aspect_y, v the
+    // same without aspect_y (2321-2322).
     let c = 0.5 + 0.5 * std::f32::consts::FRAC_1_SQRT_2;
     assert!((fill[1].uv[0] - c).abs() < 1e-6 && (fill[1].uv[1] - c).abs() < 1e-6);
+    let (mut fill, mut border) = (Vec::new(), Vec::new());
+    let vw = ShapeView {
+        aspect_y: 0.75,
+        ..view()
+    };
+    build_shape(&shape(), &vw, &mut fill, &mut border);
+    let h = 0.5 * std::f32::consts::FRAC_1_SQRT_2;
+    assert!((fill[1].uv[0] - (0.5 + h * 0.75)).abs() < 1e-6, "u scales");
+    assert!((fill[1].uv[1] - (0.5 + h)).abs() < 1e-6, "v does not");
     // zoom 2 halves the radius in uv space.
     let (fill, _) = build(&ShapeFrameVars {
         tex_zoom: 2.0,
@@ -143,10 +153,10 @@ fn border_closes_the_loop() {
         ..shape()
     };
     let (_, border) = build(&v);
-    // LINESTRIP of `sides` segments from v2[1] (2327-2349): sides + 1 vertices.
+    // LINESTRIP of `sides` segments from v2[1] (2352-2383): sides + 1 vertices.
     assert_eq!(border.len(), 6);
     assert_eq!(border[0].pos, border[5].pos);
-    // Border alpha 0 (or negative) draws no border at all (2320).
+    // Border alpha 0 (or negative) draws no border at all (2352).
     assert!(build(&shape()).1.is_empty());
 }
 
@@ -164,7 +174,7 @@ fn thick_border_is_four_cumulative_offset_copies() {
     let base = b[0].pos;
     let off = |c: usize| (b[4 * c].pos[0] - base[0], b[4 * c].pos[1] - base[1]);
     assert_eq!(off(0), (0.0, 0.0));
-    // +x, then +y on top of it, then -x (2335-2339).
+    // +x, then +y on top of it, then -x (2376-2382).
     assert!((off(1).0 - dx).abs() < 1e-6 && off(1).1.abs() < 1e-6);
     assert!((off(2).0 - dx).abs() < 1e-6 && (off(2).1 - dy).abs() < 1e-6);
     assert!(off(3).0.abs() < 1e-6 && (off(3).1 - dy).abs() < 1e-6);
@@ -172,7 +182,7 @@ fn thick_border_is_four_cumulative_offset_copies() {
 
 #[test]
 fn colours_truncate_wrap_and_scale_alpha() {
-    // ((int)(a * 255 * alpha_mult)) & 0xFF (2270-2283): truncation, and a
+    // ((int)(a * 255 * alpha_mult)) & 0xFF (2304-2313): truncation, and a
     // value over 1 wraps.
     let v = ShapeFrameVars {
         a: 1.0,
@@ -339,11 +349,11 @@ fn old_shapes_draw_only_while_blending_scaled_by_progress() {
     let Some(gpu) = gpu_or_skip("old_shapes_draw_only_while_blending_scaled_by_progress") else {
         return;
     };
-    // Not blending: old shapes are not drawn (num_reps == 1, 2217).
+    // Not blending: old shapes are not drawn (num_reps == 1, 2224).
     let out = frame(&gpu, None, &[], &[shape()], None);
     assert_eq!(&px(&out, W / 2, H / 2)[..3], &[0, 0, 0]);
     // Blending at blend_t = 0: new shapes have alpha_mult 0, old ones 1
-    // (2224-2225).
+    // (2230).
     let out = frame(
         &gpu,
         None,
@@ -373,4 +383,32 @@ fn old_shapes_draw_only_while_blending_scaled_by_progress() {
     );
     let c = px(&out, W / 2, H / 2);
     assert!(c[1] > 240 && c[0] < 10, "{c:?}");
+}
+
+#[test]
+fn additive_selects_one_instead_of_inv_src_alpha() {
+    let Some(gpu) = gpu_or_skip("additive_selects_one_instead_of_inv_src_alpha") else {
+        return;
+    };
+    // Half-alpha green over a red-filled warp source is not needed: the
+    // warp output is black, so a first shape paints red and a second,
+    // half-alpha green shape either blends (SRCALPHA/INVSRCALPHA: ~half
+    // red kept) or adds (SRCALPHA/ONE: full red kept), 2292-2294.
+    let red = shape();
+    let green = |additive: f64| ShapeFrameVars {
+        r: 0.0,
+        g: 1.0,
+        r2: 0.0,
+        g2: 1.0,
+        a: 0.5,
+        a2: 0.5,
+        additive,
+        ..shape()
+    };
+    let alpha = frame(&gpu, None, &[red, green(0.0)], &[], None);
+    let c = px(&alpha, W / 2, H / 2);
+    assert!(c[0].abs_diff(128) <= 3 && c[1].abs_diff(127) <= 3, "{c:?}");
+    let add = frame(&gpu, None, &[red, green(1.0)], &[], None);
+    let c = px(&add, W / 2, H / 2);
+    assert!(c[0] > 250 && c[1].abs_diff(127) <= 3, "{c:?}");
 }
