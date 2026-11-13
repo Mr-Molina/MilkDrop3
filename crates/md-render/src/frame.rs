@@ -6,12 +6,11 @@
 //!    971-981) clear the warp source (`m_lpVS[0]`, here
 //!    [`Renderer::other_vs`]`(`[`Renderer::warp_target`]`)`) to black;
 //! 3. the warp pass ([`Renderer::warp_pass`]) into the warp target, with
-//!    its mips;
+//!    (single-level, as in the C++: no mip generation anywhere in the frame);
 //! 4. blur passes ([`Renderer::blur_passes`]), custom shapes, custom waves, the built-in
 //!    wave, sprites incl. `darken_center` and borders (Milestone 6), the
 //!    song title burn-in (6.7) — no-op hooks here, drawn into the warp
-//!    target (Milestone 6 must regenerate its mips after them: D3D9's
-//!    `AUTOGENMIPMAP` did);
+//!    target (no mips to regenerate: the main textures have one level);
 //! 5. ([`Renderer::present`]) the composite into the caller's target
 //!    ([`crate::comp`]), then title/user sprites on top (Milestone 6
 //!    hooks), one submit, and the ping-pong swap ([`Renderer::swap_vs`]).
@@ -249,8 +248,8 @@ impl Renderer {
         //    highest level any drawn shader samples (the old preset's too
         //    while blending). They leave stage 0 clamped, which the
         //    no-shader composite inherits. They write only the blur
-        //    textures, so main's mips (made by the warp pass) stay valid;
-        //    hooks that draw into main (6.2-6.5, 6.7) must regenerate them.
+        //    textures, and main has a single level, so hooks
+        //    that draw into main (6.2-6.5, 6.7) need no mip regeneration.
         let highest = input
             .gpu
             .highest_blur()

@@ -82,7 +82,9 @@ pub fn main_texture_size(
     clamp((snap(w), snap(h)))
 }
 
-/// The ping-pong and blur textures for a `w`×`h` main texture.
+/// The ping-pong and blur textures for a `w`×`h` main texture. All are
+/// single-level, as in the C++ (plugin.cpp:1904, 1989: `AUTOGENMIPMAP`
+/// commented out), so sampling main always reads level 0.
 pub(crate) fn main_textures(
     gpu: &Gpu,
     w: u32,
@@ -90,7 +92,7 @@ pub(crate) fn main_textures(
     format: wgpu::TextureFormat,
 ) -> ([Texture2d; 2], Vec<Texture2d>) {
     let max = gpu.device().limits().max_texture_dimension_2d.max(1);
-    let vs = [0, 1].map(|_| Texture2d::new_target(gpu, w, h, format, true));
+    let vs = [0, 1].map(|_| Texture2d::new_target(gpu, w, h, format, false));
     let blur = blur_texture_sizes(w, h)
         .iter()
         .map(|&(bw, bh)| Texture2d::new_target(gpu, bw.min(max), bh.min(max), format, false))

@@ -5,8 +5,8 @@
 //! `2 * highest_used` full-screen passes (at most [`NUM_BLUR_TEX`]) draw
 //! blur texture `i` from the previous one: pass 0 reads the warp *source*
 //! (`m_lpVS[0]`, the previous frame's main texture; the C++'s own comment
-//! says "current frame" but the swap happens at the end of the frame) with
-//! its mip chain, pass `i > 0` reads blur texture `i - 1`. Even passes are
+//! says "current frame" but the swap happens at the end of the frame) at
+//! level 0 (main has one level, as in the C++), pass `i > 0` reads blur texture `i - 1`. Even passes are
 //! the long horizontal `blur1_ps`, odd passes the short vertical
 //! `blur2_ps`; presets read textures 1, 3, 5 as `blur1..3`.
 //!
@@ -301,9 +301,8 @@ impl Renderer {
     /// post-equation `blur1..3_min/_max` and `blur1_edge_darken` (F38);
     /// `highest_used` is [`crate::PresetGpu::highest_blur`] (F39).
     ///
-    /// The caller must have submitted nothing since the warp pass wrote the
-    /// main texture's mips; the passes read the warp *source* (see the
-    /// module docs) and write only the blur textures.
+    /// The passes read level 0 of the warp *source* (the main textures have
+    /// one level; see the module docs) and write only the blur textures.
     pub fn blur_passes(
         &mut self,
         enc: &mut wgpu::CommandEncoder,

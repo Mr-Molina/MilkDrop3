@@ -1,5 +1,5 @@
 //! The warp pass (Task 5.6): the previous frame, sampled through the warp
-//! mesh, drawn into the warp target, then the target's mips.
+//! mesh, drawn into the warp target (single-level, as in the C++).
 //!
 //! Mirrors code/vis_milk2/milkdropfs.cpp:
 //! - which passes run (`RenderFrame`, 1006-1047): no blend → one pass with
@@ -40,7 +40,6 @@ use crate::blend::BlendMode;
 use crate::fixed::{FixedMode, SamplerKind, Topo};
 use crate::gpu::Gpu;
 use crate::mesh::WarpMesh;
-use crate::mips::record_mips;
 use crate::pipelines::PipelineKey;
 use crate::preset_gpu::PresetGpu;
 use crate::renderer::Renderer;
@@ -258,9 +257,8 @@ impl WarpBuffers {
 impl Renderer {
     /// Record the warp pass into `enc`: draw [`Renderer::warp_target`]
     /// from the other ping-pong texture through `mesh` (whose UVs and
-    /// alphas [`WarpMesh::compute_uvs`] computed this frame), then generate
-    /// the target's mips. `old` is the blend-from preset while a blend is
-    /// running (pass 0 draws it, pass 1 draws `new` with the mesh alphas),
+    /// alphas [`WarpMesh::compute_uvs`] computed this frame). `old` is the blend-from
+    /// preset while a blend is running (pass 0 draws it, pass 1 draws `new` with the mesh alphas),
     /// `None` otherwise.
     ///
     /// Shader uniforms are uploaded with `Queue::write_buffer` and so take
@@ -364,7 +362,6 @@ impl Renderer {
                 pass.draw_indexed(range.clone(), 0, 0..1);
             }
         }
-        record_mips(gpu, enc, &vs[target]);
     }
 }
 

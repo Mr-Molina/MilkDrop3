@@ -603,3 +603,35 @@ fn no_shader_filters_follow_d3d9_blending() {
     let brighten = run(|v| v.brighten = 1.0);
     assert!(brighten.abs_diff(112) <= 1, "brighten {brighten}");
 }
+
+/// Task 6.1a: the main ping-pong textures have one mip level, as in the C++
+/// (plugin.cpp:1904: `D3DUSAGE_AUTOGENMIPMAP` is commented out), at every
+/// `tex_bits` and size mode, also after `resize`.
+#[test]
+fn main_textures_are_single_level() {
+    let Some(gpu) = gpu_or_skip("main_textures_are_single_level") else {
+        return;
+    };
+    for tex_bits in [8u8, 16] {
+        for tex_size in [
+            md_render::TexSize::Fixed,
+            md_render::TexSize::Auto,
+            md_render::TexSize::AutoPow2,
+        ] {
+            let mut s = RenderSettings::new(W, H);
+            s.tex_bits = tex_bits;
+            s.tex_size = tex_size;
+            let mut r = Renderer::new(gpu.device(), gpu.queue(), s, 3).expect("renderer");
+            let check = |r: &Renderer, when: &str| {
+                for i in 0..2 {
+                    let t = r.vs(i);
+                    assert_eq!(t.mips, 1, "{tex_bits} {tex_size:?} vs[{i}] {when}");
+                    assert_eq!(t.tex.mip_level_count(), 1, "{tex_bits} {tex_size:?} {when}");
+                }
+            };
+            check(&r, "after new");
+            r.resize(100, 70);
+            check(&r, "after resize");
+        }
+    }
+}

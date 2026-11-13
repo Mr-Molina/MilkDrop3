@@ -115,8 +115,8 @@ impl Topo {
 /// `D3DTEXF_POINT`, as for the `pw_`/`pc_` sampler prefixes
 /// (milkdropfs.cpp:3843-3846). Wrap/Clamp: `D3DTADDRESS_WRAP`/`_CLAMP` on
 /// U and V (milkdropfs.cpp:889-897, 1906-1908, 1529-1530, 3841-3842; W
-/// follows). The mip filter only matters for textures with mips (the main
-/// textures, noise, uploaded images); with one level it is inert, as in
+/// follows). The mip filter only matters for textures with mips (noise,
+/// uploaded images; not the single-level main textures); with one level it is inert, as in
 /// D3D9.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SamplerKind {

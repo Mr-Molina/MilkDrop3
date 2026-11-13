@@ -92,13 +92,13 @@ fn dssim(a: &md_render::RgbaImage, b: &md_render::RgbaImage) -> f64 {
 }
 
 /// Upload the checkerboard to the warp source, run one warp pass, and
-/// return the target's mip 0 and mip 1.
+/// return the target's mip 0 and its level count.
 fn run_warp(
     r: &mut Renderer,
     new: &WarpPreset,
     old: Option<&WarpPreset>,
     mesh: &WarpMesh,
-) -> (Vec<u8>, Vec<u8>) {
+) -> (Vec<u8>, u32) {
     let gpu = r.gpu().clone();
     let target = r.warp_target();
     upload(&gpu, r.vs(Renderer::other_vs(target)), &checkerboard());
@@ -106,10 +106,7 @@ fn run_warp(
     r.warp_pass(&mut enc, &frame(), new, old, mesh);
     gpu.queue().submit([enc.finish()]);
     let t = &r.vs(target).tex;
-    (
-        read_texture_level(&gpu, t, 0),
-        read_texture_level(&gpu, t, 1),
-    )
+    (read_texture_level(&gpu, t, 0), r.vs(target).mips)
 }
 
 #[test]
@@ -144,14 +141,11 @@ fn identity_warp_preserves_image() {
         gpu: &fixed,
         shader: shader_inputs,
     };
-    let (mip0, mip1) = run_warp(&mut r, &preset, None, &mesh);
+    let (mip0, levels) = run_warp(&mut r, &preset, None, &mesh);
     let d = dssim(&image(mip0), &want);
     eprintln!("fixed-function identity warp: dssim {d}");
     assert!(d < 0.001, "fixed-function identity warp: dssim {d}");
-    assert!(
-        mip1.iter().any(|&b| b != 0),
-        "mips generated after the warp"
-    );
+    assert_eq!(levels, 1, "the warp target has no mips (as in the C++)");
 
     // Preset warp shader `ret = tex2D(sampler_main, uv).xyz * 1.00`.
     let pg = r.load_preset(&shader_preset(1.0)).expect("load");

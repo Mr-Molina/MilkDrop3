@@ -6,7 +6,7 @@
 //! triangle strip of four `SPRITEVERTEX`es, with the fixed-function
 //! texture stage `MODULATE(DIFFUSE, TEXTURE)` / alpha `SELECTARG1 DIFFUSE`
 //! ([`FixedMode::TexModulate`], milkdropfs.cpp:3990-3997) and bilinear
-//! filtering with linear mips (3980-3985), then the post-processing
+//! filtering (3980-3985; main has one level, so the mip filter is inert), then the post-processing
 //! filters as untextured quads ([`FixedMode::Color`], `SetTexture(0,
 //! NULL)`) of white, opaque vertices (4189-4199).
 //!
