@@ -22,8 +22,10 @@
 //!   bilinear + linear mip, wrap when `var_pf_wrap > m_fSnapPoint` else
 //!   clamp. The decay and wrap come from the CURRENT preset even when this
 //!   path draws the old one (1910-1918). The C++ flips each vertex's `y`
-//!   and `PrepareFor2DDrawing`'s ortho projection (support.cpp:178-184)
-//!   flips it back, so positions are the shader path's. The 16-bit
+//!   (`tempv[i-1].y *= -1`, 1973; `-m_verts[..].y`, 2014 and 2040) and
+//!   the fixed-function ortho projection (support.cpp:179, applied by the
+//!   fixed vertex shaders) flips it back, so the fixed block carries `-y`
+//!   and lands where the shader path's vertices do. The 16-bit
 //!   back-buffer decay clamp (1923-1928) never applies: md-render targets
 //!   are 8 or 16 bits per channel.
 //!
@@ -140,18 +142,19 @@ pub fn warp_geometry(
     let tox = 0.5 / tex.0.max(1) as f32;
     let toy = 0.5 / tex.1.max(1) as f32;
     let alphas = mesh.alphas();
-    let vertex = |i: usize, rgb: u8, ang: f32| {
+    // `fixed`: the C++'s no-shader copies flip y (1973, 2014, 2040).
+    let vertex = |i: usize, rgb: u8, ang: f32, fixed: bool| {
         let [x, y] = mesh.positions()[i];
         let [u, v] = mesh.uvs()[i];
         Vertex {
-            pos: [x, y, 0.0],
+            pos: [x, if fixed { -y } else { y }, 0.0],
             color: [rgb, rgb, rgb, alphas[i]],
             uv: [u + tox, v + toy, x * 0.5 + 0.5 + tox, -y * 0.5 + 0.5 + toy],
             rad_ang: [mesh.vert_info()[i].rad, ang],
         }
     };
     let mut g = WarpGeometry::default();
-    let block = |g: &mut WarpGeometry, rgb: u8, seam: Option<f32>| -> u32 {
+    let block = |g: &mut WarpGeometry, rgb: u8, seam: Option<f32>, fixed: bool| -> u32 {
         let base = g.vertices.len() as u32;
         // milkdropfs.cpp:2149-2152: the seam is the left half of row gy/2.
         let seam_start = (gy / 2) * (gx + 1);
@@ -161,7 +164,7 @@ pub fn warp_geometry(
                 Some(a) if (seam_start..seam_end).contains(&i) => a,
                 _ => mesh.vert_info()[i as usize].ang,
             };
-            vertex(i as usize, rgb, ang)
+            vertex(i as usize, rgb, ang, fixed)
         }));
         base
     };
@@ -175,12 +178,15 @@ pub fn warp_geometry(
             Some(_) => {
                 let (a, b) = *shader_bases.get_or_insert_with(|| {
                     let pi = std::f32::consts::PI;
-                    (block(&mut g, 255, Some(-pi)), block(&mut g, 255, Some(pi)))
+                    (
+                        block(&mut g, 255, Some(-pi), false),
+                        block(&mut g, 255, Some(pi), false),
+                    )
                 });
                 vec![(&list[..half], a), (&list[half..], b)]
             }
             None => {
-                let base = *fixed_base.get_or_insert_with(|| block(&mut g, decay_rgb, None));
+                let base = *fixed_base.get_or_insert_with(|| block(&mut g, decay_rgb, None, true));
                 vec![(list, base)]
             }
         };
@@ -484,5 +490,11 @@ mod tests {
         // Fixed vertices carry the decay colour and the blend alpha.
         let f = g.indices[0] as usize;
         assert_eq!(g.vertices[f].color[..3], [127, 127, 127]);
+        // The fixed block (vertices 0..9) carries the C++'s flipped y
+        // (1973), which the fixed vertex shader's ortho projection flips
+        // back; the shader blocks (from 9) keep the mesh's y.
+        let y0 = mesh.positions()[0][1];
+        assert_eq!(y0, -1.0);
+        assert_eq!((g.vertices[0].pos[1], g.vertices[9].pos[1]), (1.0, -1.0));
     }
 }

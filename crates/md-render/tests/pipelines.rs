@@ -217,10 +217,12 @@ fn points_become_quads() {
     let Some(gpu) = gpu_or_skip("points_become_quads") else {
         return;
     };
-    // D3D9 puts pixel (5, 7) of a 16x16 target at NDC (2*5/16 - 1,
-    // 1 - 2*7/16); a point of size S covers the S x S pixels around it.
+    // D3D9 puts pixel (5, 7) of a 16x16 target at (2*5/16 - 1, 2*7/16 - 1)
+    // before the fixed-function ortho projection (support.cpp:179, y
+    // flipped: NDC y = 1 - 2*7/16); a point of size S covers the S x S
+    // pixels around it.
     let w = [255, 255, 255, 255];
-    let at = v(2.0 * 5.0 / 16.0 - 1.0, 1.0 - 2.0 * 7.0 / 16.0, w);
+    let at = v(2.0 * 5.0 / 16.0 - 1.0, 2.0 * 7.0 / 16.0 - 1.0, w);
     for (size, lo, hi) in [(None, (5, 7), (5, 7)), (Some(3.0), (4, 6), (6, 8))] {
         let img = render(&gpu, 16, 16, [0, 0, 0, 255], |b| {
             if let Some(s) = size {
@@ -280,9 +282,11 @@ fn lines_draw_one_pixel_wide() {
     let Some(gpu) = gpu_or_skip("lines_draw_one_pixel_wide") else {
         return;
     };
-    // A horizontal D3D9 line along pixel row 3 of an 8x8 target.
+    // A horizontal D3D9 line along pixel row 3 of an 8x8 target, in the
+    // pre-projection coordinates of a fixed-function draw (the ortho
+    // projection flips y, support.cpp:179).
     let w = [255, 255, 255, 255];
-    let y = 1.0 - 2.0 * 3.0 / 8.0;
+    let y = 2.0 * 3.0 / 8.0 - 1.0;
     let img = render(&gpu, 8, 8, [0, 0, 0, 255], |b| {
         b.draw(
             key(FixedMode::Color, BlendMode::Off, Topo::LineStrip),

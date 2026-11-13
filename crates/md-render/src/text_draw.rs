@@ -67,7 +67,8 @@ pub(crate) enum TextDraw {
     Glyphs { tex: Texture2d, verts: Vec<Vertex> },
 }
 
-/// Pixel `(x, y)` in a `w`×`h` target as clip space.
+/// Pixel `(x, y)` in a `w`×`h` target as clip space (glyphs: D3DX's font
+/// sprite, not a fixed-function ortho draw; `text.wgsl` does not flip).
 fn ndc(x: f32, y: f32, (w, h): (u32, u32)) -> [f32; 3] {
     [
         2.0 * x / w.max(1) as f32 - 1.0,
@@ -76,8 +77,23 @@ fn ndc(x: f32, y: f32, (w, h): (u32, u32)) -> [f32; 3] {
     ]
 }
 
+/// Pixel `(x, y)` in a `w`×`h` target as the C++'s pre-projection
+/// coordinates of a fixed-function draw (`-1 + 2*y/h`, textmgr.cpp:609-612):
+/// the fixed vertex shaders' ortho projection (textmgr.cpp:238) flips y to
+/// [`ndc`]'s. `DrawDarkTranslucentBox` uses the pixel ortho `(w, h)`
+/// projection instead (pluginshell.cpp:1806, vertices at :1840-1848), which
+/// puts the same rect on the same pixels.
+fn pre_ortho(x: f32, y: f32, (w, h): (u32, u32)) -> [f32; 3] {
+    [
+        2.0 * x / w.max(1) as f32 - 1.0,
+        2.0 * y / h.max(1) as f32 - 1.0,
+        0.0,
+    ]
+}
+
 /// The box rect as a strip (top-left, top-right, bottom-left,
-/// bottom-right) on the pixel edges.
+/// bottom-right) on the pixel edges, drawn with `fixed_color` (so in
+/// pre-projection coordinates).
 pub(crate) fn box_vertices(rect: Rect, color: [u8; 4], target: (u32, u32)) -> [Vertex; 4] {
     let (l, t, r, b) = (
         rect.left as f32,
@@ -86,7 +102,7 @@ pub(crate) fn box_vertices(rect: Rect, color: [u8; 4], target: (u32, u32)) -> [V
         rect.bottom as f32,
     );
     [(l, t), (r, t), (l, b), (r, b)].map(|(x, y)| Vertex {
-        pos: ndc(x, y, target),
+        pos: pre_ortho(x, y, target),
         color,
         ..Vertex::default()
     })

@@ -13,11 +13,13 @@
 //! Geometry (4000-4033): the quad is one pixel larger than the screen on
 //! every side (`±(1 + 1/W)`, `±(1 + 1/H)`), multiplied by the aspect
 //! correction `aspect = W / (H * m_fInvAspectY)` (`y *= aspect` when it is
-//! above 1, else `x *= 1/aspect`). The C++ coordinates have Y = -1 at the
-//! top and `PrepareFor2DDrawing`'s ortho projection (support.cpp:178-184)
-//! flips them, so a vertex at C++ `(x, y)` is at clip `(x, -y)` here.
-//! UVs: `v3[0]` (C++ top-left, so clip bottom-left) has `(lo, hi)`, i.e.
-//! `v = 1` at the bottom of the screen; `lo/hi = 0.5 ∓ 0.5/zoom`.
+//! above 1, else `x *= 1/aspect`). The vertices are the C++'s
+//! pre-projection coordinates; the fixed-function ortho projection
+//! (support.cpp:179, applied by the fixed vertex shaders) puts C++ `(x, y)`
+//! at clip `(x, -y)`, so C++ Y = -1 is the top of the screen.
+//! UVs: `v3[0]` (C++ `y = +1`, so the bottom-left on screen) has
+//! `(lo, hi)`, i.e. `v = 1` at the bottom of the screen;
+//! `lo/hi = 0.5 ∓ 0.5/zoom`.
 //!
 //! Vertex colours are `D3DCOLOR_RGBA_01` of the hue `shade` (all white
 //! unless the preset's hue-shader amount `m_fShader` exceeds 0.001,
@@ -126,15 +128,14 @@ pub fn rgba_01(r: f32, g: f32, b: f32, a: f32) -> [u8; 4] {
     [r, g, b, a].map(|x| ((x * 255.0) as i32 & 0xff) as u8)
 }
 
-/// The quad's corners in C++ order (`v3[0..4]`: top-left, top-right,
-/// bottom-left, bottom-right in C++ coordinates) at clip positions.
+/// The quad's corners in C++ order (`v3[0..4]`, 4008-4015), at the C++'s
+/// pre-projection positions.
 fn quad(window: (u32, u32), mult: (f32, f32)) -> [Vertex; 4] {
     let ox = 1.0 + 1.0 / window.0.max(1) as f32;
     let oy = 1.0 + 1.0 / window.1.max(1) as f32;
     let cpp = [(-ox, oy), (ox, oy), (-ox, -oy), (ox, -oy)];
     cpp.map(|(x, y)| Vertex {
-        // PrepareFor2DDrawing flips y.
-        pos: [x * mult.0, -(y * mult.1), 0.0],
+        pos: [x * mult.0, y * mult.1, 0.0],
         color: [255; 4],
         ..Vertex::default()
     })
@@ -315,10 +316,11 @@ mod tests {
         let d = fixed_comp_draws(&params());
         assert_eq!(blends(&d), [BlendMode::Off]);
         let v = d[0].verts;
-        // C++ v3[0] (top-left) lands at clip bottom-left with v = 1.
-        assert_eq!(v[0].pos[..2], [-1.01, -1.02]);
+        // C++ v3[0] is at y = +1.02 before the projection (4008-4015),
+        // which puts it at the bottom-left of the screen, with v = 1.
+        assert_eq!(v[0].pos[..2], [-1.01, 1.02]);
         assert_eq!(v[0].uv[..2], [0.0, 1.0]);
-        assert_eq!(v[3].pos[..2], [1.01, 1.02]);
+        assert_eq!(v[3].pos[..2], [1.01, -1.02]);
         assert_eq!(v[3].uv[..2], [1.0, 0.0]);
         assert_eq!(v[0].color, [255; 4]);
     }
@@ -422,10 +424,10 @@ mod tests {
         let mut p = params();
         p.tex = (100, 100); // m_fInvAspectY = 1, aspect = 2: y *= 2
         let d = fixed_comp_draws(&p);
-        assert!((d[0].verts[0].pos[1] + 2.04).abs() < 1e-6);
+        assert!((d[0].verts[0].pos[1] - 2.04).abs() < 1e-6);
         // The filters keep the unstretched quad.
         p.invert = 1.0;
         let d = fixed_comp_draws(&p);
-        assert!((d[1].verts[0].pos[1] + 1.02).abs() < 1e-6);
+        assert!((d[1].verts[0].pos[1] - 1.02).abs() < 1e-6);
     }
 }

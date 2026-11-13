@@ -152,7 +152,8 @@ pub struct CustomWaveGeometry {
 }
 
 /// Append the wave's vertices, `verts_per_copy` per copy: the points of
-/// 2612-2619 (clip-space with the C++'s flipped y; colour bytes
+/// 2612-2619 (the C++'s pre-projection positions, `y = var_pp_y*-2+1`,
+/// flipped by the fixed vertex shader's ortho projection; colour bytes
 /// `(int)(c * 255) & 0xFF`, alpha times `alpha_mult`), tessellated with
 /// `SmoothWave` unless `use_dots` (2639-2643; each in-between point keeps
 /// the colour of the point before it, 2487), then, for a thick line, four

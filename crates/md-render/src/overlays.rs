@@ -11,9 +11,11 @@
 //! `darken_center` by the snap point, 706-733), so each overlay is drawn
 //! once, from the blended values, never once per preset.
 //!
-//! The vertices are the C++'s, in clip space with no flip (`WFVERTEX`
-//! positions are used as is by these three functions), colours from
-//! `D3DCOLOR_RGBA_01` ([`crate::cast::rgba_01_f32`]).
+//! The vertices are the C++'s `WFVERTEX` positions as these three
+//! functions write them, before the projection: the fixed vertex shader
+//! applies the ortho projection (support.cpp:179), so a motion vector at
+//! `fy` (`y = fy*2-1`, 1286) sits `fy` of the way down the screen. Colours
+//! from `D3DCOLOR_RGBA_01` ([`crate::cast::rgba_01_f32`]).
 
 use crate::cast::{c_int, rgba_01_f32};
 use crate::frame_vars::PerFrameVars;

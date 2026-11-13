@@ -11,6 +11,13 @@
 //! the target, `D3D9_PIXEL_SHIFT`); textured modes add group 1 with the
 //! texture at binding 0 and the sampler at binding 1. Culling off, no depth
 //! (`D3DRS_CULLMODE D3DCULL_NONE`, support.cpp:75).
+//!
+//! Projection (Task 6.7a): the `fixed_*` shaders apply the C++'s 2D
+//! projection `D3DXMatrixOrthoLH(2, -2, 0, 1)` (support.cpp:179) to every
+//! draw, `clip = (x, -y, z, 1)`, before the raster shift; vertices given to
+//! [`DrawBatch::draw`] (and to pipelines from [`PipelineCache::get`]) are
+//! the C++'s pre-projection coordinates. [`FixedMode::Text`] is the
+//! exception (D3DX's font sprite: clip-space glyph vertices).
 
 use crate::blend::BlendMode;
 use crate::dynbuf::DynamicVertexBuffer;

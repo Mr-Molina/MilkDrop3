@@ -8,10 +8,11 @@
 //! render is deterministic with no RNG involved (the brief's `seed` has no
 //! C++ counterpart).
 //!
-//! Positions below are the C++'s; the emitted vertices carry `-y` because
-//! `ShowSongTitleAnim` is a fixed-function draw and `PrepareFor2DDrawing`'s
-//! ortho projection (`D3DXMatrixOrthoLH(2, -2)`, support.cpp:179) flips y
-//! (the same convention as `comp_fixed`).
+//! Positions are the C++'s pre-projection coordinates: `ShowSongTitleAnim`
+//! is a fixed-function draw, and the fixed vertex shaders apply
+//! `PrepareFor2DDrawing`'s ortho projection (`D3DXMatrixOrthoLH(2, -2)`,
+//! support.cpp:179), which flips y (the C++'s own "final flip on y" is
+//! commented out, mfs:4651-4653).
 //!
 //! Geometry (all in `f32`, as the C++): a 16 × 8 vertex grid (mfs:4496-4497,
 //! 4533-4545; `v3[128]`, indices for 15 × 7 quads, :4636-4649), `u = x / 15`,
@@ -281,9 +282,7 @@ pub fn title_passes(m: &MeshInput) -> [Vec<Vertex>; 2] {
             v[1] += oy;
         }
         pass.extend(idx.iter().map(|&i| Vertex {
-            // `PrepareFor2DDrawing`'s ortho projection (2, -2) flips y for
-            // every fixed-function draw (support.cpp:179), as in comp_fixed.
-            pos: [g[i][0], -g[i][1], 0.0],
+            pos: [g[i][0], g[i][1], 0.0],
             color,
             uv: [g[i][2], g[i][3], 0.0, 0.0],
             ..Vertex::default()
@@ -396,10 +395,10 @@ mod tests {
             "{:?}",
             shadow[0]
         );
-        assert!(near(shadow[0].pos[1], -(y0 + 2.0 / th)), "{:?}", shadow[0]);
+        assert!(near(shadow[0].pos[1], y0 + 2.0 / th), "{:?}", shadow[0]);
         // the text pass: +2 - 4 = -2 px in total
         assert!(near(text[0].pos[0], -size_x - 2.0 / tw), "{:?}", text[0]);
-        assert!(near(text[0].pos[1], -(y0 - 2.0 / th)), "{:?}", text[0]);
+        assert!(near(text[0].pos[1], y0 - 2.0 / th), "{:?}", text[0]);
         assert_eq!(shadow[0].uv[..2], [0.0, tv]);
         assert_eq!(shadow[0].color, [255; 4]);
         assert_eq!(text[0].color, [255; 4]);

@@ -328,13 +328,15 @@ pub(crate) struct CompFrame<'a> {
 
 /// The full-screen copy quad (triangle strip) for a `w`×`h` target: UVs
 /// offset by half a target pixel so every target pixel samples the source
-/// at its own centre after the raster shift.
+/// at its own centre after the raster shift. Positions are pre-projection
+/// like every fixed-function draw's (`y = -1` is the top after the fixed
+/// vertex shader's ortho flip), so `v = 0` is at `y = -1`.
 fn blit_quad(w: u32, h: u32) -> [Vertex; 4] {
     let (ou, ov) = (0.5 / w.max(1) as f32, 0.5 / h.max(1) as f32);
-    [(-1.0, 1.0), (1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)].map(|(x, y): (f32, f32)| Vertex {
+    [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)].map(|(x, y): (f32, f32)| Vertex {
         pos: [x, y, 0.0],
         color: [255; 4],
-        uv: [(x + 1.0) * 0.5 + ou, (1.0 - y) * 0.5 + ov, 0.0, 0.0],
+        uv: [(x + 1.0) * 0.5 + ou, (y + 1.0) * 0.5 + ov, 0.0, 0.0],
         ..Vertex::default()
     })
 }

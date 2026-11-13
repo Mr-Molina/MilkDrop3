@@ -433,7 +433,9 @@ impl Renderer {
             title,
         } = ctx;
         self.record_comp(&mut encoder, &comp, &title, (&text_under, &text), target);
-        // User sprites (Milestone 6) go here.
+        // User sprites (Milestone 6) go here. They are fixed-function
+        // draws: build them in the C++'s pre-projection coordinates and the
+        // fixed shaders' ortho projection flips y (Task 6.7a).
         self.gpu.queue().submit([encoder.finish()]);
         self.swap_vs();
         self.frames_since_resize = self.frames_since_resize.saturating_add(1);

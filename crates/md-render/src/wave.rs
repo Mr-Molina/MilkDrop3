@@ -19,10 +19,11 @@
 //! F38: [`WaveParams`] is built from the post-equation
 //! [`PerFrameVars`] (`var_pf_wave_*`), the C++'s inputs.
 //!
-//! Positions are D3D clip-space `x, y` as the C++ writes them (y is
-//! negated just before drawing, 3173-3182); the built-in vertex shader adds
-//! the D3D9 half-pixel shift (`VsParams`, ledger Task 4.8), so no offset is
-//! applied here.
+//! Positions are the C++'s pre-projection `x, y` (y is negated just before
+//! drawing, 3221-3230, "to stay consistent with the pre-VMS milkdrop"); the
+//! fixed vertex shader applies the ortho projection (support.cpp:179,
+//! clip `y = -y`, Task 6.7a) and the D3D9 half-pixel shift (`VsParams`,
+//! ledger Task 4.8), so neither is applied here.
 
 use crate::comp::cosine_interp;
 use crate::comp_fixed::rgba_01;
@@ -483,7 +484,7 @@ pub fn build_wave(
         cur.alpha = cur.alpha * mix + old.alpha * (1.0 - mix);
     }
 
-    // Colour (2738-2759), alpha, and the y flip (3173-3182).
+    // Colour (2738-2759), alpha, and the y flip (3221-3230).
     let [mut cr, mut cg, mut cb] = [p.r, p.g, p.b].map(|x| x.clamp(0.0, 1.0));
     if p.maximize_color {
         let max = cr.max(cg).max(cb);

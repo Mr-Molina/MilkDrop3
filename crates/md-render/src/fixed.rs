@@ -184,7 +184,8 @@ pub fn fan_to_list(verts: &[Vertex]) -> Vec<Vertex> {
 /// A `D3DPT_POINTLIST` as a triangle list: each point becomes a square of
 /// `size` pixels (at least 1, D3D9's `D3DRS_POINTSIZE_MIN` default) centred
 /// on it in a `target` (W, H) render target — half-extent `size / W` by
-/// `size / H` in NDC — as two triangles (six vertices) carrying the point's
+/// `size / H` in NDC, the same before and after the y-flipping ortho
+/// projection — as two triangles (six vertices) carrying the point's
 /// colour, UVs and depth.
 pub fn points_to_quads(verts: &[Vertex], size: f32, target: (u32, u32)) -> Vec<Vertex> {
     let size = size.max(1.0);

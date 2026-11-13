@@ -17,7 +17,7 @@ use md_hlsl::{translate, PsVersion, ShaderInput, ShaderKind};
 use naga::{Binding, BuiltIn, Module, ShaderStage, TypeInner, VectorSize};
 
 /// Every file Task 4.8 creates.
-const FILES: [&str; 11] = [
+const FILES: [&str; 10] = [
     "warp_vs.wgsl",
     "comp_vs.wgsl",
     "blur_vs.wgsl",
@@ -28,11 +28,10 @@ const FILES: [&str; 11] = [
     "fixed_tex_modulate_alpha.wgsl",
     "fixed_tex_select.wgsl",
     "text.wgsl",
-    "title.wgsl",
 ];
 
 /// The files with a vertex entry point.
-const VERTEX_FILES: [&str; 9] = [
+const VERTEX_FILES: [&str; 8] = [
     "warp_vs.wgsl",
     "comp_vs.wgsl",
     "blur_vs.wgsl",
@@ -41,7 +40,6 @@ const VERTEX_FILES: [&str; 9] = [
     "fixed_tex_modulate_alpha.wgsl",
     "fixed_tex_select.wgsl",
     "text.wgsl",
-    "title.wgsl",
 ];
 
 /// The position shift every vertex shader carries, verbatim; mirrored on
@@ -261,7 +259,6 @@ fn vertex_outputs_feed_their_fragment_shaders() {
         ),
         ("fixed_tex_select.wgsl", "fixed_tex_select.wgsl"),
         ("text.wgsl", "text.wgsl"),
-        ("title.wgsl", "title.wgsl"),
     ];
     for (vs, fs) in pairs {
         let out = outputs(&module(vs), ShaderStage::Vertex);
@@ -336,7 +333,6 @@ fn textured_fixed_passes_bind_one_texture_in_group_1() {
         "fixed_tex_modulate_alpha.wgsl",
         "fixed_tex_select.wgsl",
         "text.wgsl",
-        "title.wgsl",
     ] {
         let r = resources(&module(f));
         assert!(r.contains(&(1, 0, "tex".to_string())), "{f}: {r:?}");
@@ -369,6 +365,37 @@ fn every_vertex_shader_applies_the_d3d9_raster_shift() {
             .iter()
             .any(|e| e.stage == ShaderStage::Vertex);
         assert_eq!(has_vs, VERTEX_FILES.contains(&f), "{f}");
+    }
+}
+
+/// The C++'s 2D projection `D3DXMatrixOrthoLH(2, -2, 0, 1)`
+/// (support.cpp:179), verbatim in every fixed-function vertex shader.
+const ORTHO_FN: &str = "fn d3d9_ortho2d(p: vec3<f32>) -> vec4<f32> {
+    return vec4<f32>(p.x, -p.y, p.z, 1.0);
+}";
+
+#[test]
+fn fixed_function_vertex_shaders_apply_the_ortho_projection_once() {
+    // Task 6.7a: the fixed-function shaders flip y once, before the raster
+    // shift; the preset-shader VS (their own C++ vertex shaders), blur and
+    // text (D3DX's font sprite, positions already in clip space) do not.
+    let fixed = [
+        "fixed_color.wgsl",
+        "fixed_tex_modulate.wgsl",
+        "fixed_tex_modulate_alpha.wgsl",
+        "fixed_tex_select.wgsl",
+    ];
+    for f in VERTEX_FILES {
+        let src = source(f);
+        assert_eq!(src.contains(ORTHO_FN), fixed.contains(&f), "{f}");
+        if fixed.contains(&f) {
+            assert!(
+                src.contains("o.pos = d3d9_raster(d3d9_ortho2d(v.pos));"),
+                "{f}: the shift must follow the projection"
+            );
+        } else {
+            assert!(!src.contains("d3d9_ortho2d"), "{f}");
+        }
     }
 }
 
@@ -474,12 +501,8 @@ fn raster_shift_reproduces_d3d9_sampling_on_a_4x4_target() {
 #[test]
 fn fixed_function_alpha_ops_match_the_cpp_stage_states() {
     // COLOROP MODULATE(DIFFUSE, TEXTURE), ALPHAOP SELECTARG1 DIFFUSE.
-    for f in ["fixed_tex_modulate.wgsl", "title.wgsl"] {
-        assert!(
-            source(f).contains("return vec4<f32>(t.rgb * in.color.rgb, in.color.a);"),
-            "{f}"
-        );
-    }
+    assert!(source("fixed_tex_modulate.wgsl")
+        .contains("return vec4<f32>(t.rgb * in.color.rgb, in.color.a);"));
     // Sprite mode 4: ALPHAOP MODULATE(DIFFUSE, TEXTURE).
     assert!(source("fixed_tex_modulate_alpha.wgsl")
         .contains("return textureSample(tex, samp, in.uv) * in.color;"));

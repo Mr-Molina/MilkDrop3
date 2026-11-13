@@ -91,8 +91,10 @@ fn color(r: f64, g: f64, b: f64, a: f64, alpha_mult: f32) -> [u8; 4] {
 /// vertices: centre, ring `1..=sides`, ring 1 again, 2297-2325) to
 /// `out_fill` and, when `border_a > 0`, the border line strips (`sides + 1`
 /// vertices each, ring 1 back to ring 1, 2352-2385) to `out_border`. Both
-/// carry clip-space positions with the C++'s flipped y; the textured fill's
-/// UVs are the texture-space ring (`tu`, `tv`, zero for the rest).
+/// carry the C++'s pre-projection positions (centre `y = var_pf_y*-2+1`,
+/// 2300; the fixed vertex shader's ortho projection flips y, so `y = 1` is
+/// the top); the textured fill's UVs are the texture-space ring (`tu`,
+/// `tv`, zero for the rest).
 pub fn build_shape(
     v: &ShapeFrameVars,
     view: &ShapeView,

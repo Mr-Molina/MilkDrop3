@@ -17,7 +17,6 @@ block layouts documented here.
 | `fixed_tex_modulate_alpha.wgsl` | D3D9 fixed function: rgba texture × diffuse (sprite mode 4) | `vs_main`, `fs_main` |
 | `fixed_tex_select.wgsl` | D3D9 fixed function: texture only | `vs_main`, `fs_main` |
 | `text.wgsl` | glyph-atlas text (`FixedMode::Text`, Task 6.6) | `vs_main`, `fs_main` |
-| `title.wgsl` | song-title texture (Task 6.7 may adjust) | `vs_main`, `fs_main` |
 
 The other three `data/*.fx` files are not here: `warp_ps.fx` and `comp_ps.fx`
 are the default preset shader *bodies* and go through `md_hlsl::translate`
@@ -49,10 +48,26 @@ building a `Vertex`. `uv.xy` holds the texture coordinates of `MYVERTEX`
 ## Coordinate conventions
 
 D3D9 clip space and wgpu clip space agree: x right, y up, z in `0..1`,
-viewport y down. Texture `v` grows downwards in both. So no shader flips
-anything. md-render builds **all** vertex data exactly as the C++ does
-(including its own half-texel UV biases and position offsets); the only
-correction is the rasterization shift below. `blur_vs`
+viewport y down. Texture `v` grows downwards in both. md-render builds
+**all** vertex data exactly as the C++ does (including its own half-texel
+UV biases and position offsets); the only corrections are the
+rasterization shift below and, in the fixed-function shaders, the C++'s
+fixed-function transform.
+
+**Fixed-function projection (Task 6.7a).** Every 2D fixed-function draw of
+the C++ (waves, shapes, custom waves, motion vectors, borders,
+`darken_center`, sprites, the title animation, the no-shader warp and
+composite, the text boxes) runs with WORLD and VIEW identity and
+PROJECTION `D3DXMatrixOrthoLH(2, -2, 0, 1)` (`PrepareFor2DDrawing`,
+code/vis_milk2/support.cpp:179; `CTextManager::DrawNow`, textmgr.cpp:238),
+i.e. `clip = (x, -y, z, 1)`. The four `fixed_*` shaders apply it once, in
+`d3d9_ortho2d`, before `d3d9_raster`; their vertices are the C++'s
+pre-projection coordinates (C++ `y = -1` is the top of the target), and
+no builder flips y itself beyond what the C++ code does (the no-shader
+warp's own `-y`, milkdropfs.cpp:1973; `DrawWave`'s, :3229). The preset
+shaders' vertex shaders (`warp_vs`, `comp_vs`, which are the C++'s own
+vertex shaders), `blur_vs` and `text.wgsl` (D3DX's font sprite; the
+glyph vertices are built in clip space) do not flip. `blur_vs`
 keeps the C++'s `z = 1`, which wgpu's `0 <= z <= w` clipping accepts
 (depth testing is off for every built-in pass).
 
@@ -70,7 +85,7 @@ shader contract (Milestone 4 intro: `U` at (0,0), `T` at (0,1),
 | `warp_vs`, `comp_vs` | (preset `U`; `T` at (0,1)) | `vs_params: VsParams` (VS) | (preset textures) | |
 | `blur_vs` + `blur1_ps` / `blur2_ps` | `blur: BlurUniforms` (FS) | `vs_params: VsParams` (VS) | `tex_main: texture_2d<f32>` | `samp_main: sampler` |
 | `fixed_color` | | `vs_params: VsParams` (VS) | | |
-| `fixed_tex_modulate`, `fixed_tex_modulate_alpha`, `fixed_tex_select`, `text`, `title` | | `vs_params: VsParams` (VS) | `tex: texture_2d<f32>` | `samp: sampler` |
+| `fixed_tex_modulate`, `fixed_tex_modulate_alpha`, `fixed_tex_select`, `text` | | `vs_params: VsParams` (VS) | `tex: texture_2d<f32>` | `samp: sampler` |
 
 `VsParams` sits at binding 2 (`md_hlsl::layout::BUILTIN_VS_PARAMS_BINDING`)
 so that it never collides with the preset fragment shader's `U`/`T` when
@@ -145,7 +160,7 @@ it into `VsParams.pixel_shift`. `texel_size` is always the **target**'s
 | warp (`warp_vs`) | warp texture, `1/texsize` | `+0.5/texsize` on `tu,tv` (milkdropfs.cpp:1835-1837) and `tu_orig,tv_orig` (plugin.cpp:2299-2300) |
 | comp (`comp_vs`) | window / back buffer | grid positions `sx = (u - 0.5/W)*2 - 1`, `sy = -((v - 0.5/H)*2 - 1)` (plugin.cpp:2041-2058) |
 | blur (`blur_vs`) | the blur texture written | fullscreen quad, v = 0 at the bottom (milkdropfs.cpp:1542-1562); the source texel size for the sampling offsets is `BlurUniforms._c0` |
-| sprites, video echo, shapes, waves, text, title | the target drawn to | as built by the C++ (see below) |
+| sprites, video echo, shapes, waves, text, title | the target drawn to | as built by the C++, before the projection (see below) |
 
 Fixed-function draws build their UVs exactly as the C++ does, per quad:
 `ShowToUser_NoShaders` (milkdropfs.cpp:4004-4120) extends the quad by one
@@ -153,7 +168,13 @@ pixel, maps v bottom-up (`v3[0]` at the top gets `tv = temp_hi`), scales UVs
 by `1/fZoom` around 0.5 (`temp_lo/hi = 0.5 ∓ 0.5/fZoom`) and flips u/v by
 `nVideoEchoOrientation` on the echo pass; sprites (milkdropfs.cpp:3600-3640)
 use `±0.5` corners times `repeatx/repeaty` plus 0.5. md-render reproduces
-those vertex values; the shaders add nothing but the raster shift.
+those vertex values; the shaders add nothing but the raster shift (and,
+in the `fixed_*` shaders, the ortho projection above). The shift is
+applied after the projection, in clip space, as D3D9 rasterizes after
+transforming, so its sign is the same for every pass: a fixed-function quad
+from `(c - 0.5, r - 0.5)` to `(c + 0.5, r + 0.5)` in D3D9 pixels covers
+exactly pixel `(c, r)` (md-render `tests/orientation.rs`,
+`fixed_quad_lands_on_its_d3d9_pixel`).
 
 ## Fixed-function equivalents
 
@@ -170,7 +191,6 @@ Only sprite blend mode 4 (colour-keyed) uses ALPHAOP `MODULATE`
 | `fixed_tex_modulate_alpha` | sprite mode 4: COLOROP and ALPHAOP `MODULATE(DIFFUSE, TEXTURE)` | `texture * colour` (rgba) |
 | `fixed_tex_select` | `SELECTARG1 TEXTURE` — no C++ draw uses it (every `SELECTARG1` in milkdropfs.cpp/pluginshell.cpp selects `DIFFUSE`); kept for md-render's own copies (`FixedMode::TexSelect`) | `texture` |
 | `text` | glyph atlas (`md-text`, RGBA8, coverage in `.a`) | `(colour.rgb, colour.a * atlas.a)` |
-| `title` | none set in `ShowSongTitleAnim` (milkdropfs.cpp:4477ff), so the standard state; blend ONE/ONE (4492-4494) | `(texture.rgb * colour.rgb, colour.a)` |
 
 Blend state, topology and the fan/point conversions are pipeline state
 chosen by md-render (Task 5.3), not part of these shaders.
