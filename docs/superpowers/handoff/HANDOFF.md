@@ -20,7 +20,7 @@ Written 2026-11-12 17:25 UTC at the hand-off from the first controller session.
 | 6 Full renderer (6.1–6.9, plus 6.1a and 6.7a) | complete |
 | 7–9 | not started |
 
-**Next task: 5.8** (`render` subcommand and first golden images). Its implementer was cut off by a usage limit before writing any files, so start it fresh. The dispatch prompt used is reproduced below under "Dispatching 5.8".
+**Next task: 7.1** (md-core state: per-frame and per-pixel evaluation contexts). Milestone 6 finished in the second controller session (2026-11-13), which also added two controller-ruled tasks, 6.1a and 6.7a; see the ledger. Before dispatching Milestone 7, read every `Note (binds 7.x)`, `binds 7.3`, `binds 7.7`, `binds 7.8` and `binds 7.9` line in the ledger: 6.3–6.9 left obligations on md-core (old-preset shape and wave programs during blends, FrameInput lists, compute_uvs before begin_frame, flush_text order, re-blessing the golden suite with the real Visualizer). The "Dispatching 5.8" section below is historical.
 
 ## Process used (keep it, or the rulings lose their meaning)
 
@@ -75,7 +75,7 @@ cargo install cargo-deny --locked
 
 - **`mesa-vulkan-drivers`** provides lavapipe (`/usr/share/vulkan/icd.d/lvp_icd.json`), so md-render GPU tests run headless. Run them with `MD_REQUIRE_GPU=1` so they fail rather than skip.
 - **The cross targets** let `cargo check/clippy -p md-audio --target …` validate the WASAPI and ScreenCaptureKit backends.
-- **The gate before every commit:** `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check` and `scripts/check-no-native-build.sh`.
+- **The gate before every commit:** `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo deny check` and `scripts/check-no-native-build.sh`, plus the golden suite (it is `#[ignore]`d at ~4.5 min on lavapipe): `MD_REQUIRE_GPU=1 cargo test -p milkdrop --test golden_suite -- --include-ignored`.
 - **External downloads:** GitHub archives and the API are blocked by the egress proxy. crates.io works.
 
 ## Key cross-task facts a new controller must not lose
