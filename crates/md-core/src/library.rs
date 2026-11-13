@@ -330,7 +330,7 @@ fn read_file_info(path: &Path, max_ps: i32) -> Option<f32> {
     Some(if r.is_nan() { 0.0 } else { r.clamp(0.0, 5.0) })
 }
 
-/// plugin.cpp:7566-7575: line 1 starts with `MILKDROP_PRESET_VERSION`, line 2
+/// plugin.cpp:7566-7580: line 1 starts with `MILKDROP_PRESET_VERSION`, line 2
 /// with `PSVERSION`, and the `%d` at byte 10 of line 2 (default 2) is above
 /// the cap.
 fn ps_version_exceeds(head: &str, max_ps: i32) -> bool {
