@@ -14,14 +14,13 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// The golden preset. The default preset the plan names,
-/// `ps2/upgraded_default.milk`, is all black at frame 60 under the Task 5.8
-/// driver (static values only: its image is the built-in wave, drawn from
-/// Milestone 6 on), and so is every other ps2/ps2x/ps3 corpus preset except
-/// the first that shows structure, `ps2/noise_grain.milk`, whose composite
-/// shader generates the image from noise. Re-point this to
-/// `upgraded_default.milk` once waves exist (Task 6.9).
-const GOLDEN_PRESET: &str = "ps2/noise_grain.milk";
+/// The golden preset: `ps2/shader_rings.milk`, a shader-only picture (rings,
+/// spokes and a colour gradient drawn by its composite shader from `rad`,
+/// `ang`, `uv`, `time` and the audio bands). The plan's default preset,
+/// `upgraded_default.milk`, is black under the Task 5.8 driver (its image is
+/// the built-in wave, drawn from Milestone 6 on), and so is every other
+/// corpus preset except noise_grain, whose image is near-black grain.
+const GOLDEN_PRESET: &str = "ps2/shader_rings.milk";
 
 fn args(preset: &str, frames: u32, every: u32) -> RenderArgs {
     RenderArgs {
@@ -52,6 +51,11 @@ fn golden_default_preset_frame_60() {
     let golden = repo().join("tests/golden/rust/default_60.png");
     let r = md_testkit::compare_png(img, &golden, 0.02);
     assert!(r.passed, "dssim {} (diff {:?})", r.dssim, r.diff_png);
+    // The golden discriminates: an all-black frame must fail against it.
+    let black = md_render::RgbaImage::from_pixel(640, 480, image::Rgba([0, 0, 0, 255]));
+    let golden_img = image::open(&golden).expect("golden").to_rgba8();
+    let dssim = 1.0 / md_testkit::ssim(&black, &golden_img).max(1e-12) - 1.0;
+    assert!(dssim > 0.02, "black passes: dssim {dssim}");
 }
 
 #[test]
@@ -101,4 +105,64 @@ fn cli_parses_render_options() {
     assert_eq!((a.every, a.size, a.seed, a.wav), (5, (640, 480), 0, None));
     assert!(parse_args(&["render".to_string(), "--size".into(), "10".into()]).is_err());
     assert!(parse_args(&["render".to_string()]).is_err());
+}
+
+#[test]
+fn run_writes_the_requested_pngs() {
+    let Some(_gpu) = gpu_or_skip("run_writes_the_requested_pngs") else {
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("milkdrop-run-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let argv: Vec<String> = [
+        "render",
+        "--preset",
+        repo()
+            .join("tests/presets")
+            .join(GOLDEN_PRESET)
+            .to_str()
+            .unwrap(),
+        "--wav",
+        repo()
+            .join("tests/golden/test_signal.wav")
+            .to_str()
+            .unwrap(),
+        "--frames",
+        "7",
+        "--every",
+        "3",
+        "--size",
+        "64x48",
+        "--seed",
+        "7",
+        "--out",
+        dir.to_str().unwrap(),
+    ]
+    .map(String::from)
+    .to_vec();
+    let Command::Render(a) = parse_args(&argv).expect("parse") else {
+        panic!("not render");
+    };
+    let written = milkdrop::render_cmd::run(&a).expect("run");
+    let mut names: Vec<String> = std::fs::read_dir(&dir)
+        .expect("out dir")
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["frame_3.png", "frame_6.png"]);
+    assert_eq!(written.len(), 2);
+    for n in &names {
+        let img = image::open(dir.join(n)).expect("decode");
+        assert_eq!((img.width(), img.height()), (64, 48));
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn bad_numeric_flags_name_the_flag() {
+    let e = parse_args(&["render".to_string(), "--frames".into(), "x".into()]).unwrap_err();
+    assert!(e.contains("--frames"), "{e}");
+    let e =
+        parse_args(&["render".to_string(), "--every".into(), "99999999999".into()]).unwrap_err();
+    assert!(e.contains("--every"), "{e}");
 }

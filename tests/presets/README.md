@@ -66,6 +66,7 @@ milkdrop"), so the corpus has none. Directories: `classic/` = 0, `ps2/` = 2,
 | `ps2/noise_grain.milk` | PSVERSION 2; sampler_noise_lq + texsize_noise_lq, sampler_pw_noise_lq, sampler_rand00 + texsize, rand_frame |
 | `ps2/qvar_bank.milk` | PSVERSION 2; q1..q16 from per-frame, read in per-pixel and in shaders via q-names and _qa.._qd |
 | `ps2/rand_tiles.milk` | PSVERSION 2; random textures sampler_rand01_smalltiled, sampler_rand02, sampler_rand03 (+ texsize_) |
+| `ps2/shader_rings.milk` | PSVERSION 2; shader-only picture (no waves/shapes): comp shader draws rings, spokes and a colour gradient from rad/ang/uv/time, modulated by bass and treb; Task 5.8 golden |
 | `ps2/upgraded_default.milk` | PSVERSION 2; an MD1 preset upgraded by MilkDrop 2 (generated default warp/comp text) |
 | `ps2/user_texture.milk` | PSVERSION 2; user texture sampler_mytex (textures/mytex.png) + texsize_mytex, textured custom shape |
 | `ps2/version200.milk` | PSVERSION 2 written by MilkDrop 2.0 (MILKDROP_PRESET_VERSION=200: PSVERSION only, no _WARP/_COMP) |

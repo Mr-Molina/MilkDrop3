@@ -45,8 +45,12 @@ fn parse_render(argv: &[String]) -> Result<Command, String> {
             "--preset" => preset = Some(PathBuf::from(value()?)),
             "--wav" => wav = Some(PathBuf::from(value()?)),
             "--out" => out = Some(PathBuf::from(value()?)),
-            "--frames" => frames = Some(u32::try_from(num(value()?)?).map_err(|e| e.to_string())?),
-            "--every" => every = Some(u32::try_from(num(value()?)?).map_err(|e| e.to_string())?),
+            "--frames" => {
+                frames = Some(u32::try_from(num(value()?)?).map_err(|e| format!("{flag}: {e}"))?)
+            }
+            "--every" => {
+                every = Some(u32::try_from(num(value()?)?).map_err(|e| format!("{flag}: {e}"))?)
+            }
             "--seed" => seed = num(value()?)?,
             "--size" => size = parse_size(value()?)?,
             other => return Err(format!("unknown option `{other}`")),
