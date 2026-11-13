@@ -43,6 +43,10 @@
 use crate::texture::Texture2d;
 use md_text::{fonts, layout, Atlas, FontSpec, Rect, TextFlags};
 
+/// The colour `DrawDarkTranslucentBox` uses, `0xD0000000` as `[r, g, b, a]`
+/// (pluginshell.cpp:1847).
+pub const DARK_TRANSLUCENT_BOX: [u8; 4] = [0, 0, 0, 0xD0];
+
 /// Number of font slots (F43).
 pub const FONT_SLOTS: usize = 6;
 
@@ -75,6 +79,11 @@ pub(crate) enum Item {
         rect: Rect,
         color: [u8; 4],
     },
+    /// A [`TextQueue::draw_box`] box: alpha-blended, under all text.
+    DarkBox {
+        rect: Rect,
+        color: [u8; 4],
+    },
     Text {
         font: FontId,
         text: String,
@@ -92,7 +101,7 @@ pub struct TextQueue {
     atlases: Vec<Atlas>,
     items: Vec<Item>,
     /// The GPU copy of each atlas (created and updated by `flush_text`).
-    pub(crate) textures: [Option<Texture2d>; FONT_SLOTS],
+    pub(crate) textures: [Option<(Texture2d, u64)>; FONT_SLOTS],
 }
 
 impl TextQueue {
@@ -156,9 +165,14 @@ impl TextQueue {
         tight
     }
 
-    /// `CTextManager::DrawBox`: a filled rectangle in queue order.
+    /// `CPluginShell::DrawDarkTranslucentBox` (pluginshell.cpp:1815-1855):
+    /// a translucent box (`SRCALPHA`/`INVSRCALPHA`; the C++ colour is
+    /// [`DARK_TRANSLUCENT_BOX`]), drawn under *all* of the frame's queued
+    /// text whatever the call order, as the C++ draws it immediately,
+    /// before `DrawNow`. (The opaque box a text carries is
+    /// `draw(.., dark_box)`: textmgr's own, swapped before its text.)
     pub fn draw_box(&mut self, rect: Rect, color: [u8; 4]) {
-        self.items.push(Item::Box { rect, color });
+        self.items.push(Item::DarkBox { rect, color });
     }
 
     /// Number of queued messages (a text with a box is two).

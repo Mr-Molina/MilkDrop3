@@ -287,7 +287,10 @@ impl Renderer {
     /// and warp mesh are replaced (preset programs are rebound lazily, see
     /// [`crate::ShaderProgram`]). The composite grid and target follow the
     /// window, and the next frame clears the warp source as the C++ does
-    /// after every resize (`m_nFramesSinceResize = 0`).
+    /// after every resize (`m_nFramesSinceResize = 0`). Do not call it
+    /// between [`Renderer::begin_frame`] and [`Renderer::present`] (the
+    /// frame's composite and [`Renderer::flush_text`] draws are sized for
+    /// the old window).
     pub fn resize(&mut self, w: u32, h: u32) {
         let max = self.gpu.device().limits().max_texture_dimension_2d.max(1);
         let window = (w.clamp(1, max), h.clamp(1, max));

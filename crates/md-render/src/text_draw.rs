@@ -13,6 +13,13 @@
 //! composite and before the copy to the caller's view — never into the main
 //! textures, so it does not feed back into the next frame.
 //!
+//! Dark translucent boxes ([`TextQueue::draw_box`],
+//! `CPluginShell::DrawDarkTranslucentBox`, pluginshell.cpp:1815-1855) are
+//! drawn immediately in the C++, before `DrawNow` (pluginshell.cpp:1405), so
+//! they sit under all of the frame's queued text: `SRCALPHA`/`INVSRCALPHA`
+//! (:1828-1830), diffuse `0xD0000000` (:1847), pixel-edge vertices like the
+//! textmgr boxes.
+//!
 //! States, per message in queue order (textmgr.cpp:592-622):
 //!
 //! * Boxes (`pfont == NULL`): `D3DRS_ALPHABLENDENABLE` FALSE (:596), the
@@ -109,15 +116,21 @@ pub(crate) fn glyph_vertices(
     out
 }
 
-/// Bring the GPU copy of `atlas` up to date (recreate it when the atlas
-/// grew, otherwise upload the changed region) and return it.
-fn sync_atlas(gpu: &Gpu, atlas: &mut Atlas, slot: &mut Option<Texture2d>) -> Texture2d {
+/// Bring the GPU copy of `atlas` up to date and return it. A new atlas
+/// generation (it grew or was reset: every UV changed) gets a fresh
+/// texture, so draws recorded earlier this frame keep sampling the texels
+/// their UVs were computed for; within one generation glyphs are only
+/// added, and the changed region is uploaded in place.
+fn sync_atlas(gpu: &Gpu, atlas: &mut Atlas, slot: &mut Option<(Texture2d, u64)>) -> Texture2d {
     let dirty = atlas.take_dirty();
+    let gen = atlas.generation();
     let (pixels, w, h) = atlas.texture_rgba();
-    let stale = slot.as_ref().is_none_or(|t| (t.w, t.h) != (w, h));
+    let stale = slot
+        .as_ref()
+        .is_none_or(|(t, g)| *g != gen || (t.w, t.h) != (w, h));
     if stale {
-        *slot = Some(Texture2d::from_rgba8(gpu, w, h, pixels, false));
-    } else if let (Some(d), Some(t)) = (dirty, slot.as_ref()) {
+        *slot = Some((Texture2d::from_rgba8(gpu, w, h, pixels, false), gen));
+    } else if let (Some(d), Some((t, _))) = (dirty, slot.as_ref()) {
         gpu.queue().write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &t.tex,
@@ -142,18 +155,19 @@ fn sync_atlas(gpu: &Gpu, atlas: &mut Atlas, slot: &mut Option<Texture2d>) -> Tex
             },
         );
     }
-    slot.clone().expect("created above")
+    slot.as_ref().expect("created above").0.clone()
 }
 
-/// Lay out every text item; UVs are only valid for the atlas generation
-/// they were computed in, so if a later layout reset the same font's atlas
-/// (it was full), everything is laid out once more against the settled
-/// atlases.
+/// Lay out every text item. UVs are only valid for the atlas generation
+/// they were computed in: each item records the generation after its own
+/// layout, and if any differs from its font's final generation (a later
+/// item of the same font grew or reset the atlas), everything is laid out
+/// again against the settled atlases (once: the second pass finds every
+/// glyph already placed, unless the atlas is too small for the whole set).
 fn layout_all(queue: &mut TextQueue, items: &[Item]) -> Vec<Option<Layout>> {
     let mut laid = Vec::new();
     for _ in 0..2 {
-        let mut gens = [0u64; FONT_SLOTS];
-        laid = items
+        let (l, gens): (Vec<_>, Vec<_>) = items
             .iter()
             .map(|it| match it {
                 Item::Text {
@@ -165,16 +179,16 @@ fn layout_all(queue: &mut TextQueue, items: &[Item]) -> Vec<Option<Layout>> {
                 } => {
                     let atlas = queue.atlas_mut(*font);
                     let l = layout(atlas, text, *rect, *flags);
-                    gens[*font as usize] = atlas.generation();
-                    Some(l)
+                    (Some(l), Some((*font, atlas.generation())))
                 }
-                Item::Box { .. } => None,
+                _ => (None, None),
             })
-            .collect();
-        let settled = items.iter().all(|it| match it {
-            Item::Text { font, .. } => queue.atlas_mut(*font).generation() == gens[*font as usize],
-            Item::Box { .. } => true,
-        });
+            .unzip();
+        laid = l;
+        let settled = gens
+            .iter()
+            .flatten()
+            .all(|(font, g)| queue.atlas_mut(*font).generation() == *g);
         if settled {
             break;
         }
@@ -185,7 +199,14 @@ fn layout_all(queue: &mut TextQueue, items: &[Item]) -> Vec<Option<Layout>> {
 impl Renderer {
     /// Lay out and queue `queue`'s messages to be drawn over this frame's
     /// composite by [`Renderer::present`], and empty the queue. May be
-    /// called several times per frame; messages draw in call order.
+    /// called several times per frame; messages draw in call order, except
+    /// that [`TextQueue::draw_box`] boxes of every call draw under all the
+    /// text. A flush that grows or resets an atlas gives it a new texture,
+    /// so earlier flushes' draws stay valid.
+    ///
+    /// The draws are sized for the window as it is now: do not call
+    /// [`Renderer::resize`] between `flush_text` and `present` (the
+    /// composite recorded by `begin_frame` has the same constraint).
     pub fn flush_text(&mut self, ctx: &mut FrameCtx, queue: &mut TextQueue) {
         let items = queue.take_items();
         if items.is_empty() {
@@ -210,6 +231,9 @@ impl Renderer {
                 (Item::Box { rect, color }, _) => ctx.text.push(TextDraw::Box {
                     verts: box_vertices(*rect, *color, target),
                 }),
+                (Item::DarkBox { rect, color }, _) => ctx.text_under.push(TextDraw::Box {
+                    verts: box_vertices(*rect, *color, target),
+                }),
                 (Item::Text { font, color, .. }, Some(l)) => {
                     let verts = glyph_vertices(&l.quads, *color, target);
                     if !verts.is_empty() {
@@ -225,9 +249,17 @@ impl Renderer {
     /// Issue the recorded text draws into the open composite pass.
     pub(crate) fn record_text(
         batch: &mut DrawBatch,
+        under: &[TextDraw],
         draws: &[TextDraw],
         format: wgpu::TextureFormat,
     ) {
+        let translucent =
+            PipelineKey::new(FixedMode::Color, BlendMode::Alpha, Topo::TriStrip, format);
+        for d in under {
+            if let TextDraw::Box { verts } = d {
+                batch.draw(translucent, verts, None, SamplerKind::PointClamp);
+            }
+        }
         let boxes = PipelineKey::new(FixedMode::Color, BlendMode::Off, Topo::TriStrip, format);
         let glyphs = PipelineKey::new(FixedMode::Text, BlendMode::Alpha, Topo::TriList, format);
         for d in draws {
@@ -240,5 +272,57 @@ impl Renderer {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use md_text::{FontSpec, TextFlags};
+
+    fn text(font: crate::text_pass::FontId, t: &str, top: i32) -> Item {
+        Item::Text {
+            font,
+            text: t.to_owned(),
+            rect: Rect::new(0, top, 4000, top + 100),
+            flags: TextFlags::default(),
+            color: [255; 4],
+        }
+    }
+
+    #[test]
+    fn layouts_are_redone_when_a_later_item_grows_the_atlas() {
+        use crate::text_pass::FontId::Simple;
+        let spec = FontSpec {
+            face: "Arial".into(),
+            size_px: 40,
+            bold: false,
+            italic: false,
+            antialiased: true,
+        };
+        let mut q = TextQueue::with_bundled_fonts(std::array::from_fn(|_| spec.clone()));
+        // Items built without the draw-time layout: the first item is laid out
+        // against the 256 px atlas, the second grows it.
+        let many: String = (0x21u32..0x7f)
+            .chain(0xc0..0x100)
+            .filter_map(char::from_u32)
+            .collect();
+        let items = vec![text(Simple, "Rag", 0), text(Simple, &many, 200)];
+        let laid = layout_all(&mut q, &items);
+        let Item::Text {
+            text: t,
+            rect,
+            flags,
+            ..
+        } = &items[0]
+        else {
+            unreachable!()
+        };
+        let fresh = layout(q.atlas_mut(Simple), t, *rect, *flags);
+        assert!(
+            q.atlas_mut(Simple).generation() > 0,
+            "the atlas must have grown"
+        );
+        assert_eq!(laid[0].as_ref().expect("text"), &fresh);
     }
 }

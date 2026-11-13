@@ -346,7 +346,7 @@ impl Renderer {
         &mut self,
         enc: &mut wgpu::CommandEncoder,
         frame: &CompFrame,
-        text: &[crate::text_draw::TextDraw],
+        text: (&[crate::text_draw::TextDraw], &[crate::text_draw::TextDraw]),
         target: &wgpu::TextureView,
     ) {
         WarpBuffers::upload_raw(
@@ -399,7 +399,7 @@ impl Renderer {
         }
         // Text and boxes over the composite (6.6; DrawNow runs after
         // MyRenderFn, pluginshell.cpp:1393-1405), before the copy.
-        Renderer::record_text(&mut batch, text, format);
+        Renderer::record_text(&mut batch, text.0, text.1, format);
         batch.finish();
 
         // Copy to the caller's target (its texture's format and size).

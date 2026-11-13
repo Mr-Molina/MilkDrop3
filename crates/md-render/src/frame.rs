@@ -183,6 +183,8 @@ pub struct FrameCtx<'a> {
     /// Text and boxes queued by [`Renderer::flush_text`] (6.6), drawn over
     /// the composite by `present`.
     pub(crate) text: Vec<crate::text_draw::TextDraw>,
+    /// The translucent boxes ([`crate::TextQueue::draw_box`]), drawn first.
+    pub(crate) text_under: Vec<crate::text_draw::TextDraw>,
 }
 
 impl std::fmt::Debug for FrameCtx<'_> {
@@ -304,6 +306,7 @@ impl Renderer {
             encoder,
             comp,
             text: Vec::new(),
+            text_under: Vec::new(),
         }
     }
 
@@ -407,8 +410,9 @@ impl Renderer {
             mut encoder,
             comp,
             text,
+            text_under,
         } = ctx;
-        self.record_comp(&mut encoder, &comp, &text, target);
+        self.record_comp(&mut encoder, &comp, (&text_under, &text), target);
         // Title animation and user sprites (Milestone 6) go here.
         self.gpu.queue().submit([encoder.finish()]);
         self.swap_vs();

@@ -149,10 +149,11 @@ fn dark_box_precedes_text() {
 }
 
 #[test]
-fn later_box_covers_earlier_text() {
-    // Messages draw in queue order (textmgr.cpp:601-621), so a box queued
-    // after some text covers it; only a text's own box is swapped before it.
-    let Some(gpu) = gpu_or_skip("later_box_covers_earlier_text") else {
+fn draw_box_stays_under_text_queued_before_it_and_blends() {
+    // draw_box is DrawDarkTranslucentBox (pluginshell.cpp:1815-1855): drawn
+    // immediately in the C++, before DrawNow, so under all queued text
+    // whatever the order; SRCALPHA/INVSRCALPHA with 0xD0000000.
+    let Some(gpu) = gpu_or_skip("draw_box_stays_under_text_queued_before_it_and_blends") else {
         return;
     };
     let mut r = renderer(&gpu);
@@ -166,13 +167,144 @@ fn later_box_covers_earlier_text() {
         None,
     );
     assert!(calc.right > calc.left && calc.bottom > calc.top, "{calc:?}");
-    q.draw_box(calc, [0, 0, 255, 255]);
+    // Queued after the text, over a source that is not black: a mid-grey
+    // translucent colour, so blending with the black frame is visible.
+    q.draw_box(calc, [0, 0, 200, 0x80]);
     let img = frame_with_text(&mut r, &mut q);
+    let (mut bg, mut glyph) = (0, 0);
     for y in calc.top..calc.bottom {
         for x in calc.left..calc.right {
-            assert_eq!(px(&img, x as u32, y as u32), [0, 0, 255, 255]);
+            let p = px(&img, x as u32, y as u32);
+            // Blended background: 200 * 128/255 = 100 blue over black.
+            if p == [0, 0, 100, 255] || p[2].abs_diff(100) <= 1 && p[0] == 0 && p[1] == 0 {
+                bg += 1;
+            } else if p[0] > 150 && p[1] > 150 {
+                glyph += 1;
+            }
         }
     }
+    assert!(bg > 100, "blended box pixels: {bg}");
+    assert!(glyph > 20, "text pixels stay text-coloured on top: {glyph}");
+    // Outside the box nothing is drawn.
+    assert_eq!(px(&img, calc.right as u32, calc.top as u32), [0, 0, 0, 255]);
+    assert_eq!(md_render::DARK_TRANSLUCENT_BOX, [0, 0, 0, 0xD0]);
+}
+
+/// A string of many distinct glyphs, enough to outgrow the 256 px atlas.
+fn many_glyphs() -> String {
+    (0x21u32..0x7f)
+        .chain(0xc0..0x100)
+        .filter_map(char::from_u32)
+        .collect()
+}
+
+fn big_fonts() -> [FontSpec; 6] {
+    std::array::from_fn(|_| FontSpec {
+        size_px: 40,
+        ..fonts()[0].clone()
+    })
+}
+
+/// Every glyph pixel of `text` drawn at `rect` equals the coverage of a
+/// reference atlas (a fresh one of the same font).
+fn assert_matches_reference(img: &[u8], text: &str, rect: Rect) {
+    let spec = big_fonts()[0].clone();
+    let mut atlas =
+        md_render::md_text::Atlas::new(&spec, &md_render::md_text::fonts::bundled_database());
+    let l = md_render::md_text::layout(&mut atlas, text, rect, TextFlags::default());
+    let (tex, tw, th) = atlas.texture_rgba();
+    let mut checked = 0;
+    for g in &l.quads {
+        for y in g.y0 as u32..g.y1 as u32 {
+            for x in g.x0 as u32..g.x1 as u32 {
+                let tx = (g.u0 * tw as f32).round() as u32 + (x - g.x0 as u32);
+                let ty = (g.v0 * th as f32).round() as u32 + (y - g.y0 as u32);
+                let cov = tex[((ty * tw + tx) * 4 + 3) as usize];
+                let got = px(img, x, y)[0];
+                assert!(got.abs_diff(cov) <= 1, "({x},{y}): {got} vs coverage {cov}");
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 100, "{checked}");
+}
+
+#[test]
+fn earlier_items_survive_atlas_growth_in_the_same_frame() {
+    // The first item's UVs are computed against a 256 px atlas; the second
+    // (off screen) adds enough glyphs to grow it. The first must still
+    // sample the right texels.
+    let Some(gpu) = gpu_or_skip("earlier_items_survive_atlas_growth_in_the_same_frame") else {
+        return;
+    };
+    let mut r = renderer(&gpu);
+    let mut q = TextQueue::with_bundled_fonts(big_fonts());
+    let rect = Rect::new(4, 4, 150, 60);
+    q.draw(
+        FontId::Simple,
+        "Rag",
+        rect,
+        TextFlags::default(),
+        WHITE,
+        None,
+    );
+    q.draw(
+        FontId::Simple,
+        &many_glyphs(),
+        Rect::new(0, 1000, 4000, 1100),
+        TextFlags::default(),
+        WHITE,
+        None,
+    );
+    let img = frame_with_text(&mut r, &mut q);
+    assert_matches_reference(&img, "Rag", rect);
+}
+
+#[test]
+fn earlier_flush_survives_atlas_growth_in_a_later_flush() {
+    let Some(gpu) = gpu_or_skip("earlier_flush_survives_atlas_growth_in_a_later_flush") else {
+        return;
+    };
+    let mut r = renderer(&gpu);
+    let mut q = TextQueue::with_bundled_fonts(big_fonts());
+    let rect = Rect::new(4, 4, 150, 60);
+    let preset = md_preset::Preset::defaults();
+    let pg = PresetGpu {
+        warp: None,
+        comp: None,
+    };
+    let mut vars = PerFrameVars::from_preset(&preset, 0.0);
+    (vars.zoom, vars.zoomexp, vars.rot, vars.warp) = (1.0, 1.0, 0.0, 0.0);
+    (vars.cx, vars.cy, vars.sx, vars.sy) = (0.5, 0.5, 1.0, 1.0);
+    (vars.decay, vars.wrap, vars.gamma, vars.echo_alpha) = (1.0, 1.0, 1.0, 0.0);
+    (vars.shader, vars.wave_a, vars.mv_a) = (0.0, 0.0, 0.0);
+    let rot = [RotParams::default(); 24];
+    let sound = SoundData::default();
+    r.mesh_mut().compute_uvs(&vars, None, 0.0, None);
+    let input = FrameInput::new(&preset, &pg, &vars, &rot, &sound);
+    let target = Texture2d::new_target(r.gpu(), W, H, wgpu::TextureFormat::Rgba8Unorm, false);
+    let mut ctx = r.begin_frame(&input);
+    q.draw(
+        FontId::Simple,
+        "Rag",
+        rect,
+        TextFlags::default(),
+        WHITE,
+        None,
+    );
+    r.flush_text(&mut ctx, &mut q);
+    q.draw(
+        FontId::Simple,
+        &many_glyphs(),
+        Rect::new(0, 1000, 4000, 1100),
+        TextFlags::default(),
+        WHITE,
+        None,
+    );
+    r.flush_text(&mut ctx, &mut q);
+    r.present(ctx, &target.view);
+    let img = read_texture_level(r.gpu(), &target.tex, 0);
+    assert_matches_reference(&img, "Rag", rect);
 }
 
 fn width(q: &mut TextQueue, text: &str, flags: TextFlags, rect: Rect) -> i32 {
