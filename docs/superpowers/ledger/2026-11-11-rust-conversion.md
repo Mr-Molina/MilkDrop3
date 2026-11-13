@@ -341,3 +341,4 @@ Task 6.1a: implementer DONE (0231c9d) — default_60 golden unchanged; tests/war
 Task 6.1a: minor (deferred): comment wrapping/grammar in frame.rs:9 and the blur/comp_fixed/fixed docs; dead generate_mips calls on main in test upload helpers.
 Task 6.1a: complete (commits ae111aa..0231c9d, review clean) — controller-ruled task, not in the plan's checklist.
 Task 6.2: dispatched (BASE b078627) — binding: F38, F40, Task 5.3 sampler note, Task 6.1a (no main mip regeneration)
+Task 6.2: implementer DONE_WITH_CONCERNS (0161080) — smoothing recursive with scale folded in (milkdropfs.cpp:850-859) and additive = SRCALPHA/ONE, both per C++ over the brief; build_wave returns WaveGeometry (multi-range) via WaveView; identity_vars in tests/frame.rs sets wave_a=0; CPU tests lack RED; wave.rs 622 lines
