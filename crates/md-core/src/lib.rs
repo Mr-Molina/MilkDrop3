@@ -7,10 +7,13 @@ pub mod error;
 pub mod history;
 pub mod keymap;
 pub mod library;
+pub mod messages;
 pub mod per_frame;
 pub mod per_pixel;
 pub mod shapes;
+pub mod sprites;
 pub mod state;
+pub mod supertext;
 pub mod switcher;
 pub mod timing;
 pub mod ui;
@@ -24,7 +27,11 @@ mod keymap_tests;
 #[cfg(test)]
 mod library_tests;
 #[cfg(test)]
+mod messages_tests;
+#[cfg(test)]
 mod per_frame_tests;
+#[cfg(test)]
+mod sprites_tests;
 #[cfg(test)]
 mod state_tests;
 #[cfg(test)]
