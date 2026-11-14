@@ -493,3 +493,4 @@ Task 7.8: fix round 1/5 dispatched (Important: one toast for one failure, none f
 Task 7.8: Note (binds 7.9): md-render's supertext/title state is authoritative for whether a title/message animation is active; do not trust md-core SuperTextSlot::is_active after launch.
 Task 7.8: fix round 1/5 (7 addressed, 0 open — code-error toasts 0x10/0x20 one, 0x30 none; per-sprite Vm doc; supertext authority doc; fade once; C++-style path concat (leading separator drop matches Windows since the base ends in '\', plugin.cpp:8589-8594); sprites.rs 515 lines; citations; commits 989261e..40871f5)
 Task 7.8: complete (commits 07dd357..cc84798 + fix 40871f5, review clean after 1 fix round; controller gate: 861 passed, fmt/clippy/deny/native OK)
+Task 7.9: dispatched (BASE 104793e) — binding lines extracted to the workspace task-7.9-bindings.md (F38/F44/F47/F51/F55/F64 + every 'binds 7.x/7.9' ledger note); golden suite re-bless with driver=visualizer per the 6.9 ruling
