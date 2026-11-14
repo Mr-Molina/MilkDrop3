@@ -139,7 +139,7 @@ pub use shapes::{build_shape, ShapeFrameVars, ShapeGeometry, ShapeView};
 pub use sprites::{sprite_color, sprite_quads, sprite_state, SpriteFrame, SpriteQuads, SpriteVars};
 pub use tex_size::{blur_texture_sizes, main_texture_size, TexSize};
 pub use texcache::{TextureId, MAX_BYTES, MAX_IMAGES, TEXTURE_OVERHEAD_BYTES};
-pub use text_pass::{FontId, TextQueue, DARK_TRANSLUCENT_BOX, FONT_SLOTS};
+pub use text_pass::{FontId, Item as QueuedMessage, TextQueue, DARK_TRANSLUCENT_BOX, FONT_SLOTS};
 pub use texture::{full_mip_count, Texture2d, Texture3d};
 pub use textures::{
     pick_random_texture, scan_texture_names, texture_candidates, RandPicks, TextureError,

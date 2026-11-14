@@ -73,8 +73,9 @@ pub fn mask_flags(flags: TextFlags) -> TextFlags {
 }
 
 /// One queued message (`td_string`): a dark box (`pfont == NULL`) or text.
+/// Read with [`TextQueue::messages`].
 #[derive(Clone, Debug)]
-pub(crate) enum Item {
+pub enum Item {
     Box {
         rect: Rect,
         color: [u8; 4],
@@ -173,6 +174,13 @@ impl TextQueue {
     /// `draw(.., dark_box)`: textmgr's own, swapped before its text.)
     pub fn draw_box(&mut self, rect: Rect, color: [u8; 4]) {
         self.items.push(Item::DarkBox { rect, color });
+    }
+
+    /// The queued messages in queue order (a text with a box is a box
+    /// message and a text message), for callers that inspect what a frame
+    /// draws without a GPU.
+    pub fn messages(&self) -> &[Item] {
+        &self.items
     }
 
     /// Number of queued messages (a text with a box is two).

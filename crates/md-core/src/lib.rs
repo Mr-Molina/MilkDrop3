@@ -13,6 +13,7 @@ pub mod shapes;
 pub mod state;
 pub mod switcher;
 pub mod timing;
+pub mod ui;
 pub mod vars;
 pub mod waves;
 
@@ -28,6 +29,14 @@ mod per_frame_tests;
 mod state_tests;
 #[cfg(test)]
 mod switcher_tests;
+#[cfg(test)]
+mod ui_draw_screens_tests;
+#[cfg(test)]
+mod ui_draw_tests;
+#[cfg(test)]
+mod ui_prompt_tests;
+#[cfg(test)]
+mod ui_tests;
 
 pub use commands::{Command, Mods};
 pub use custom::{ShapeState, WaveState};
@@ -41,4 +50,5 @@ pub use shapes::eval_custom_shapes;
 pub use state::{InitInputs, InitMode, PresetState};
 pub use switcher::{ShaderLoader, Switcher};
 pub use timing::{SwitchConfig, SwitchEvent, TimerFrame, Timers};
+pub use ui::{Ui, UiAction, UiCtx, UiMode};
 pub use waves::eval_custom_waves;
