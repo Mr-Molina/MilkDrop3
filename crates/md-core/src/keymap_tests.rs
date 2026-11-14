@@ -1,5 +1,5 @@
 use crate::commands::{Command, Mods};
-use crate::keymap::{accepts_text_char, lookup, Key, KeyChord, BINDINGS};
+use crate::keymap::{accepts_text_char, lookup, lookup_char, Key, KeyChord, BINDINGS};
 use std::collections::HashSet;
 
 const HELP: &str = include_str!("../../../assets/help.txt");
@@ -70,30 +70,39 @@ fn every_help_text_key_has_a_binding() {
 
 #[test]
 fn help_text_names_every_key_in_the_list() {
-    // The hand list above must not drift from the file.
-    for needle in [
-        "ESC ",
-        "ALT+ENTER",
-        "ALT+SHIFT",
-        "SPACE / H",
-        "BACKSPACE",
-        "` / ~",
-        "R ",
-        "L ",
-        "M ",
-        "S ",
-        "A ",
-        "D ",
-        "F1 ",
-        "F2 ",
-        "F3 ",
-        "F4 ",
-        "F5 ",
-        "F6 ",
-        "F7 ",
-        "F10 ",
+    // The hand list above must not drift from the file: each key is the
+    // first word of a help line that carries its description.
+    let lines: Vec<&str> = HELP.lines().collect();
+    for (key, text) in [
+        ("ESC", "exit help / menus"),
+        ("ALT+ENTER", "toggle fullscreen"),
+        ("ALT+SHIFT", "toggle multiple monitor stretching"),
+        ("SPACE / H", "soft / hard cut to next preset"),
+        ("BACKSPACE", "go back to previous preset"),
+        ("` / ~", "[un]lock current preset"),
+        ("R", "toggle random/sequential preset order"),
+        ("L", "load specific preset"),
+        ("M", "show/hide preset-editing Menu"),
+        ("S", "save new preset"),
+        ("A", "do random mini-mash-up"),
+        ("D", "toggle warp & comp shader locks"),
+        ("F1", "help"),
+        ("F2", "change max FPS"),
+        ("F3", "change time between preset"),
+        ("F4", "Show preset name"),
+        ("F5", "Show FPS"),
+        ("F6", "Show preset rating"),
+        ("F7", "Always on top"),
+        ("F10", "Pause"),
     ] {
-        assert!(HELP.contains(needle), "help.txt lost {needle:?}");
+        assert!(
+            lines.iter().any(|l| {
+                l.trim_start()
+                    .strip_prefix(key)
+                    .is_some_and(|rest| rest.starts_with(' ') && rest.trim().starts_with(text))
+            }),
+            "help.txt has no line `{key}  {text}`"
+        );
     }
 }
 
@@ -241,13 +250,57 @@ fn text_chars_are_the_cpp_range() {
 
 #[test]
 fn no_media_or_desktop_commands_are_bound() {
-    // F47 and A.4: media keys (Ctrl+arrows, the shell's Left/Right seek) and
-    // Winamp keys are not ported. Ctrl+arrows are text-cursor words only.
+    // F47 and A.4: the Winamp keys are not ported, and Ctrl+arrows are
+    // text-cursor words only.
+    for ch in "uUxXcCvVbB".chars() {
+        let bound = lookup_char(ch);
+        // c, C, x, X, v, V only act as Ctrl chords (copy/cut/paste).
+        assert_eq!(bound, None, "{ch:?}");
+        assert!(
+            BINDINGS
+                .iter()
+                .all(|(c, _)| c.key != Key::Char(ch) || c.ctrl),
+            "{ch:?}"
+        );
+    }
     assert_eq!(
         lookup(KeyChord::ctrl(Key::Left)),
         Some(Command::Left(Mods::CTRL))
     );
-    assert!(BINDINGS.iter().all(|(c, _)| c.key != Key::Char('u')));
+}
+
+#[test]
+fn lookup_char_resolves_regular_mode_characters() {
+    assert_eq!(lookup_char('h'), Some(Command::NextPresetHard));
+    assert_eq!(lookup_char('!'), Some(Command::RandomizeWarpShader));
+    assert_eq!(lookup_char('7'), Some(Command::Digit(7)));
+    // No `case` in HandleRegularKey: the prompts and the load list still
+    // read these characters themselves.
+    for ch in ['R', 'u', 'x', 'b', '?', 'z', ' ', 'é'] {
+        assert_eq!(lookup_char(ch), None, "{ch:?}");
+    }
+    // A character is never a Ctrl chord.
+    assert_eq!(lookup_char('t'), Some(Command::LaunchSongTitle));
+}
+
+#[test]
+fn alt_enter_and_alt_shift_ignore_other_modifiers() {
+    // The host toggles on any WM_SYSKEYDOWN of Enter / Shift
+    // (Milkdrop2PcmVisualizer.cpp:264-271).
+    let alt_shift_enter = KeyChord {
+        shift: true,
+        ..KeyChord::alt(Key::Enter)
+    };
+    assert_eq!(lookup(alt_shift_enter), Some(Command::ToggleFullscreen));
+    let all = KeyChord {
+        key: Key::Shift,
+        shift: true,
+        ctrl: true,
+        alt: true,
+    };
+    assert_eq!(lookup(all), Some(Command::ToggleStretch));
+    // Without Alt the Shift key alone is nothing.
+    assert_eq!(lookup(KeyChord::plain(Key::Shift)), None);
 }
 
 #[test]

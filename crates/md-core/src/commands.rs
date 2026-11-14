@@ -87,8 +87,11 @@ pub enum Command {
     ToggleShaderHelp,
     /// Help text: "F10   Pause". The help screen names the key, but the C++
     /// has no handler for it (`VK_F10` arrives as `WM_SYSKEYDOWN`, which the
-    /// shell does not read, pluginshell.cpp:2073-2307); bound per the help
-    /// text, behaviour is 7.9's.
+    /// shell does not read, pluginshell.cpp:2073-2307). Ruling (Task 7.6):
+    /// it toggles a freeze: the preset clock, frame counter, blend and preset
+    /// timers and auto-advance stop and the last frame is re-presented; audio
+    /// is still read but not analysed into the frame; the UI and menus keep
+    /// working.
     TogglePause,
     /// Help text: "F2    change max FPS" (plugin.cpp:5411: cycles 30, 60, 90,
     /// 120, 144, 240, 360 and unlimited, announcing it as a song title).
@@ -118,10 +121,13 @@ pub enum Command {
     /// Help text: "R               toggle random/sequential preset order"
     /// (plugin.cpp:6333; also erases the history).
     ToggleRandomOrder,
-    /// Help text: "L               load specific preset" (plugin.cpp:6554;
-    /// pressed in the load list it closes it). In the load list the other
-    /// letters seek (6258, `SeekToPreset`); the app sends those as
-    /// [`Command::TypeChar`] while that list is up.
+    /// Help text: "L               load specific preset" (plugin.cpp:6554:
+    /// `UpdatePresetList`, then the load list opens; taken from regular mode
+    /// and from the menu). In the load list every letter, `l` and `m`
+    /// included, is caught first by `SeekToPreset` (6256-6259), so the
+    /// "close the list" branch at 6556-6559 (and `m`'s `UI_LOAD` branch,
+    /// 6580) is dead code: do not port it. Letters reach the list as
+    /// [`Command::TypeChar`], see [`crate::keymap`].
     OpenLoadMenu,
     /// Help text: "M               show/hide preset-editing Menu"
     /// (plugin.cpp:6575).
@@ -202,13 +208,19 @@ pub enum Command {
     /// `case 'y'` / `'Y'`: numeric input launches custom messages
     /// (plugin.cpp:6599-6604, the C++ default, 1108). The C++ compares the
     /// key against `keyMappings[3..=4]`, which nothing ever fills, so the
-    /// branch is dead there; bound to `y` as its comment intends.
+    /// branch is dead there. The shipped resource fills them:
+    /// `IDS_KEY_MAPPINGS "yYYyYzZ"` (plugin.rc:1087), i.e. `[2]` = `Y`
+    /// (Ctrl+Y), `[3]` = `y`, `[4]` = `Y`; bound as that resource says.
     BeginCustomMessageInput,
     /// `case 'k'` (unshifted): numeric input launches sprites
-    /// (plugin.cpp:6492-6503).
+    /// (plugin.cpp:6492-6503). Deviation: the C++ picks sprite or kill from
+    /// `GetKeyState(VK_SHIFT)` (6496-6501); characters arrive as
+    /// [`Command::TypeChar`] with no Shift state, so the character's case
+    /// decides (`k` vs `K`). The two differ only under Caps Lock.
     BeginSpriteInput,
     /// `case 'K'` (shifted): numeric input kills sprites by number
-    /// (plugin.cpp:6493-6503).
+    /// (plugin.cpp:6493-6503); decided by the character's case, see
+    /// [`Command::BeginSpriteInput`].
     BeginSpriteKillInput,
     /// `case '*': m_nNumericInputDigits = 0; m_nNumericInputNum = 0;`
     /// (plugin.cpp:6592): forget a half-typed number.
@@ -272,10 +284,14 @@ pub enum Command {
     Paste,
 
     // ---- text input ----
-    /// A character typed while a string is being edited (`WM_CHAR`,
-    /// plugin.cpp:5171-5285: only `' '..='z'`, `{` and `}` are taken, see
-    /// [`crate::accepts_text_char`]), or a letter pressed in the load list
-    /// (6258). `Visualizer::text_input(ch)` is `command(TypeChar(ch))` (F46).
+    /// EVERY character the keyboard produced (`WM_CHAR`), whatever the UI
+    /// mode (Task 7.6 input contract, see [`crate::keymap`]).
+    /// `Visualizer::text_input(ch)` is `command(TypeChar(ch))`. md-core reads
+    /// it by mode (7.7): in regular mode through [`crate::lookup_char`] (an
+    /// unbound character does nothing); while a string is edited it is typed
+    /// if [`crate::accepts_text_char`] (plugin.cpp:5171-5285); in the load
+    /// list a letter seeks (6256-6259); in the delete, overwrite and
+    /// upgrade-shader prompts it answers them (5287-5391).
     TypeChar(char),
 }
 

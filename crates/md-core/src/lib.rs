@@ -33,7 +33,7 @@ pub use commands::{Command, Mods};
 pub use custom::{ShapeState, WaveState};
 pub use error::{CoreError, ProgramError};
 pub use history::{History, PRESET_HIST_LEN};
-pub use keymap::{accepts_text_char, lookup, Key, KeyChord, BINDINGS};
+pub use keymap::{accepts_text_char, lookup, lookup_char, Key, KeyChord, BINDINGS};
 pub use library::{Entry, PresetLibrary};
 pub use per_frame::{blend_outputs, run_per_frame, FrameInputs};
 pub use per_pixel::per_pixel_runner;

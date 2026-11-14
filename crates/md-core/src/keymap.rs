@@ -1,22 +1,43 @@
 //! Keys and the regular-mode key bindings.
 //!
-//! The C++ splits input in two, and the split decides which keys type text:
-//! `WM_CHAR` carries the character the keyboard produced (letters, digits,
-//! punctuation; `HandleRegularKey`, plugin.cpp:6245), `WM_KEYDOWN` carries a
-//! virtual key (F-keys, arrows, Space, Enter, Backspace, ..., plugin.cpp:5400).
-//! [`Key::Char`] is the first kind, every other [`Key`] the second.
+//! The C++ splits input in two: `WM_CHAR` carries the character the keyboard
+//! produced (letters, digits, punctuation), `WM_KEYDOWN` a virtual key
+//! (F-keys, arrows, Space, Enter, Backspace, ..., plugin.cpp:5400). A mode
+//! reads whichever it needs: regular mode reads characters in
+//! `HandleRegularKey` (plugin.cpp:6245), text editing types characters and
+//! absorbs every key (5171-5285, 5869), the load list seeks on every letter
+//! (6256), the delete / overwrite / upgrade prompts answer on any character
+//! (5287-5391).
 //!
-//! While a string is edited the C++ absorbs every `WM_KEYDOWN` and types only
-//! the `WM_CHAR`s (plugin.cpp:5171-5285, 5869). So in a typing mode the app
-//! sends [`Command::TypeChar`] for each character (Space included, though
-//! Space is a key outside typing) and [`lookup`] for the keys that are not
-//! characters. Modes that take raw characters, besides text editing: the load
-//! list (letters seek), the confirm prompts (`y`), the mash-up screen (digits
-//! `1`..`5` pick a slot, via [`Command::Digit`]). Which mode does what is 7.7.
+//! # Input contract (Task 7.6 ruling)
+//!
+//! The app does not know md-core's UI mode, so it never chooses by mode:
+//!
+//! - EVERY character goes to `Visualizer::text_input(ch)` =
+//!   `command(`[`Command::TypeChar`]`(ch))`. md-core resolves it by mode: in
+//!   regular mode through [`lookup_char`], elsewhere as text, seek or answer
+//!   (7.7 owns that dispatch).
+//! - Everything that is not a character goes through [`lookup`] and then
+//!   `command`: non-character keys, and chords with Ctrl or Alt.
+//! - A key that also types (Space; Enter, Backspace and Escape produce control
+//!   characters md-core ignores) is sent both ways, key first, as Windows
+//!   delivers `WM_KEYDOWN` then `WM_CHAR`.
+//!
+//! Classification, by what winit reports:
+//!
+//! | press | app sends |
+//! |---|---|
+//! | `q`, `Q` (Shift+q), `r`, `?` | `TypeChar('q')`, `TypeChar('Q')`, ... |
+//! | `5`, Shift+`1` (`!`) | `TypeChar('5')`, `TypeChar('!')` |
+//! | Ctrl+`K`, Ctrl+`T`, Ctrl+`C` | `lookup(KeyChord{ key: Char('k'), ctrl, .. })` (no `WM_CHAR` in C++) |
+//! | Alt+Enter, Alt+Shift | `lookup(..)` (`WM_SYSKEYDOWN`) |
+//! | F1..F10, Up, Home, Delete, Insert | `lookup(..)` |
+//! | Space | `lookup(Space)`, then `TypeChar(' ')` |
 //!
 //! [`BINDINGS`] lists the regular-mode meaning of every chord, plus the
 //! navigation keys with no modifiers. [`lookup`] resolves a chord the way the
-//! C++ does: modifiers other than Alt do not change which key it is.
+//! C++ does: modifiers other than Alt do not change which non-character key
+//! it is. [`lookup_char`] is the regular-mode resolver for a typed character.
 
 use crate::commands::{Command, Mods};
 
@@ -266,6 +287,15 @@ fn exact(chord: KeyChord) -> Option<Command> {
 /// makes it a different message the plugin never reads, so only the chords
 /// listed with Alt match.
 pub fn lookup(chord: KeyChord) -> Option<Command> {
+    // The host toggles on any `WM_SYSKEYDOWN` of Enter or Shift, whatever
+    // else is held (Milkdrop2PcmVisualizer.cpp:264-271).
+    if chord.alt {
+        match chord.key {
+            Key::Enter => return Some(Command::ToggleFullscreen),
+            Key::Shift => return Some(Command::ToggleStretch),
+            _ => {}
+        }
+    }
     let chord = normalize(chord);
     if let Some(command) = exact(chord) {
         return Some(command);
@@ -278,4 +308,11 @@ pub fn lookup(chord: KeyChord) -> Option<Command> {
         shift: chord.shift,
         ctrl: chord.ctrl,
     }))
+}
+
+/// The regular-mode command for a typed character (`HandleRegularKey`,
+/// plugin.cpp:6245-6608), or `None` when the C++ has no `case` for it (`R`,
+/// `u`, most punctuation). Other modes read the character themselves.
+pub fn lookup_char(ch: char) -> Option<Command> {
+    lookup(KeyChord::ch(ch))
 }
