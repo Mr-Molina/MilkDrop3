@@ -97,8 +97,8 @@ impl Harness {
 
     /// Send one command; `SetValue`s are applied to the preset.
     pub fn send(&mut self, cmd: Command) -> Vec<UiAction> {
-        let mut ctx = ctx!(self);
-        let acts = self.ui.handle(cmd, &mut ctx);
+        let ctx = ctx!(self);
+        let acts = self.ui.handle(cmd, &ctx);
         for a in &acts {
             if let UiAction::SetValue(f, v) = a {
                 f.set(&mut self.preset, v);
@@ -222,7 +222,7 @@ fn typechar_is_a_hotkey_in_regular_mode_and_text_or_seek_elsewhere() {
         vec![UiAction::Forward(Command::ToggleRandomOrder)]
     );
     assert_eq!(h.ch('q'), vec![UiAction::Forward(Command::EchoZoomDown)]);
-    assert!(h.ch('~').len() == 1);
+    assert_eq!(h.ch('~'), vec![UiAction::Forward(Command::ToggleLock)]);
     assert!(
         h.ch('\u{7}').is_empty(),
         "an unbound character does nothing"
@@ -414,6 +414,43 @@ fn menu_tree_item_count_matches_cpp() {
             assert_eq!(tree.menus[k].parent, Some(i));
         }
     }
+    // sample rows pinned to plugin.cpp:6794, 6743, 6781, 6843 and plugin.rc
+    let row = |m: usize, label: &str| {
+        tree.menus[m]
+            .items
+            .iter()
+            .find(|i| i.def.label == label)
+            .unwrap()
+            .def
+    };
+    let d = row(POST, "sustain level");
+    assert_eq!((d.kind, d.min, d.max), (ItemKind::Blendable, 0.5, 1.0));
+    assert_eq!(
+        d.tooltip,
+        "controls the eventual fade to black; 1=no fade, 0.9=strong fade; 0.98=recommended."
+    );
+    let d = row(menu::WAVEFORM, "wave type");
+    assert_eq!((d.kind, d.min, d.max), (ItemKind::Int, 0.0, 7.0));
+    assert_eq!(
+        d.tooltip,
+        "each value represents a different way of drawing the waveform"
+    );
+    let d = row(menu::MOTION, "zoom amount");
+    assert_eq!(
+        (d.kind, d.min, d.max),
+        (ItemKind::LogBlendable, 0.01, 100.0)
+    );
+    assert_eq!(
+        d.tooltip,
+        "controls inward/outward motion.  0.9=zoom out, 1.0=no zoom, 1.1=zoom in"
+    );
+    let d = row(menu::SHAPECODE0 + 3, "number of sides");
+    assert_eq!((d.kind, d.min, d.max), (ItemKind::Int, 3.0, 100.0));
+    assert_eq!(
+        d.tooltip,
+        "the default number of sides that make up the polygonal shape"
+    );
+    assert_eq!(row(menu::WAVECODE0, "number of samples").max, 512.0);
     // each row carries a tooltip from the .rc table
     assert!(tree
         .menus

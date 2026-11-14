@@ -30,6 +30,7 @@
 pub mod edit;
 pub mod field;
 pub mod field_tables;
+pub mod host_toasts;
 pub mod load_screen;
 pub mod mashup;
 pub mod menu;
@@ -61,7 +62,6 @@ pub use menu::{MenuTree, ROOT};
 pub use menu_tree::Recompile;
 pub use mode::UiMode;
 pub use overlays::ScreenLayout;
-pub use save_screen::SaveScreen;
 
 /// `ERR_*` (plugin.h:453-459): what a message is about. A notification
 /// replaces the earlier ones (`AddError`, plugin.cpp:4082).
@@ -153,9 +153,10 @@ pub enum UiAction {
         name: String,
     },
     /// Make `dir` the preset directory and rescan (plugin.cpp:6139-6168 and
-    /// `UI_CHANGEDIR`, 5782-5832). For `UI_CHANGEDIR` the host answers an
-    /// invalid directory with an [`strings::INVALID_PATH`] toast and goes on
-    /// in the load list.
+    /// `UI_CHANGEDIR`, 5782-5832). From the load list the host then calls
+    /// [`Ui::dir_changed`]. From the `UI_CHANGEDIR` prompt it answers with
+    /// [`Ui::change_dir_result`]: success goes to the load list, an invalid
+    /// directory raises [`strings::INVALID_PATH`] and the prompt stays.
     ChangeDir(PathBuf),
     /// `DeletePresetFile`: delete the file, then rescan and select
     /// `index` again.
@@ -297,8 +298,6 @@ pub struct Ui {
     pub menu: MenuTree,
     /// The preset list screen.
     pub load: LoadScreen,
-    /// The save and overwrite prompts.
-    pub save: SaveScreen,
     /// `m_errors`.
     pub toasts: Vec<Toast>,
     /// `m_bShowFPS`.
@@ -337,7 +336,6 @@ impl Ui {
             mode: UiMode::Regular,
             menu: MenuTree::new(),
             load: LoadScreen::default(),
-            save: SaveScreen::default(),
             toasts: Vec::new(),
             show_fps: false,
             show_preset_name: false,
@@ -386,11 +384,15 @@ impl Ui {
     }
 
     /// One command. See the module docs for how it is read.
-    pub fn handle(&mut self, cmd: Command, ctx: &mut UiCtx) -> Vec<UiAction> {
+    pub fn handle(&mut self, cmd: Command, ctx: &UiCtx) -> Vec<UiAction> {
         let mut out = Vec::new();
         self.prune_toasts(ctx.now);
         match cmd {
             Command::TypeChar(ch) => self.type_char(ch, ctx, &mut out),
+            // Ctrl+Backspace is Backspace to everything but the editor
+            Command::CtrlBackspace if !self.edit.active => {
+                self.key(Command::PrevPreset, ctx, &mut out)
+            }
             other => self.key(other, ctx, &mut out),
         }
         out
@@ -474,7 +476,7 @@ impl Ui {
     }
 
     /// `WM_KEYDOWN` (plugin.cpp:5400-6229).
-    fn key(&mut self, cmd: Command, ctx: &mut UiCtx, out: &mut Vec<UiAction>) {
+    fn key(&mut self, cmd: Command, ctx: &UiCtx, out: &mut Vec<UiAction>) {
         // 1. keys read in every mode, even while a string is edited
         //    (5409-5480).
         match cmd {
@@ -505,7 +507,11 @@ impl Ui {
         //    (pluginshell.cpp:2284-2294), then whatever the visualizer does
         //    with a key.
         match cmd {
-            Command::ToggleHelp => self.flip(UiFlag::ShowHelp, out),
+            Command::ToggleHelp => {
+                // F1 also ends the "Press F1" message (pluginshell.cpp:2287)
+                self.show_press_f1 = false;
+                self.flip(UiFlag::ShowHelp, out)
+            }
             Command::Escape if self.show_help => self.flip(UiFlag::ShowHelp, out),
             Command::ToggleFullscreen | Command::ToggleStretch => out.push(UiAction::Forward(cmd)),
             // keys no mode reads here (the C++ shell absorbs them)

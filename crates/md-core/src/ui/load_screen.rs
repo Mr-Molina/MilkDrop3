@@ -63,7 +63,13 @@ pub fn strip_ext(name: &str) -> &str {
 }
 
 impl Ui {
-    /// The list was rescanned (`UpdatePresetList`): put the highlight back.
+    /// The list was rescanned with the "re-select the current preset" flag
+    /// (`UpdatePresetList(.., bTryReselectCurrentPreset = true)`, the default,
+    /// plugin.cpp:7708-7725): put the highlight on `current_file`, else row 0.
+    /// Use this after a save or any rescan that is not one of the file
+    /// operations below. After a delete call [`Ui::end_delete`], after a
+    /// rename [`Ui::end_rename`], after a directory change from the list
+    /// [`Ui::dir_changed`]; each reproduces what the C++ does there.
     pub fn library_changed(&mut self, lib: &PresetLibrary, current_file: Option<&str>) {
         self.load.reselect(lib, current_file);
     }

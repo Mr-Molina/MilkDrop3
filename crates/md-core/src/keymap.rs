@@ -296,6 +296,9 @@ pub fn lookup(chord: KeyChord) -> Option<Command> {
             _ => {}
         }
     }
+    if chord.ctrl && !chord.alt && chord.key == Key::Backspace {
+        return Some(Command::CtrlBackspace);
+    }
     let chord = normalize(chord);
     if let Some(command) = exact(chord) {
         return Some(command);

@@ -163,7 +163,7 @@ fn rename_prompt_flow() {
         UiMode::LoadRename,
         "stays until the host says it worked"
     );
-    h.ui.end_rename();
+    h.ui.end_rename(&h.lib, None);
     assert_eq!(h.ui.mode, UiMode::Load);
     // Escape leaves the prompt for the list
     h.send(Command::Insert);
@@ -464,4 +464,111 @@ fn field_values_roundtrip_through_the_preset() {
             }
         }
     }
+}
+
+/// Scan the harness directory again, as the host does after a file operation.
+fn rescan(h: &mut Harness) {
+    h.lib = crate::library::PresetLibrary::scan(&h.tmp.0, md_preset::PsVersion::Ps3_0);
+}
+
+#[test]
+fn end_delete_keeps_the_row_and_clamps() {
+    let mut h = Harness::new();
+    h.ch('l');
+    h.ui.load.pos = h.row("beta.milk");
+    h.send(Command::Delete(Mods::NONE));
+    h.ch('y');
+    std::fs::remove_file(h.path("beta.milk")).unwrap();
+    rescan(&mut h);
+    h.ui.end_delete(&h.lib);
+    // the same row: now the next file (plugin.cpp:8199-8201)
+    assert_eq!(h.ui.load.pos, h.row("gamma.milk"));
+    assert_eq!(h.lib.entries()[h.ui.load.pos].name, "gamma.milk");
+    // deleting the last row selects the new last one
+    let last = h.lib.entries().len() - 1;
+    h.ui.load.pos = last;
+    std::fs::remove_file(h.path("rho.milk")).unwrap();
+    rescan(&mut h);
+    h.ui.end_delete(&h.lib);
+    assert_eq!(h.ui.load.pos, h.lib.entries().len() - 1);
+    // library_changed would have jumped to the playing file instead
+    h.ui.load.pos = 3;
+    h.ui.library_changed(&h.lib, Some("alpha.milk"));
+    assert_eq!(h.ui.load.pos, h.row("alpha.milk"));
+}
+
+#[test]
+fn end_rename_highlights_the_renamed_file() {
+    let mut h = Harness::new();
+    h.ch('l');
+    h.ui.load.pos = h.row("beta.milk");
+    h.send(Command::Insert);
+    h.type_str("zz");
+    h.send(enter());
+    std::fs::rename(h.path("beta.milk"), h.path("betazz.milk")).unwrap();
+    rescan(&mut h);
+    h.ui.end_rename(&h.lib, Some("betazz.milk"));
+    assert_eq!((h.ui.mode, h.ui.edit.active), (UiMode::Load, false));
+    assert_eq!(h.lib.entries()[h.ui.load.pos].name, "betazz.milk");
+    // a failed move leaves the prompt and the row alone
+    h.ui.load.pos = 4;
+    h.send(Command::Insert);
+    h.ui.end_rename(&h.lib, None);
+    assert_eq!((h.ui.mode, h.ui.load.pos), (UiMode::Load, 4));
+}
+
+#[test]
+fn dir_changed_goes_to_row_zero() {
+    let mut h = Harness::new();
+    h.ch('l');
+    h.ui.load.pos = 3;
+    h.ui.dir_changed();
+    assert_eq!(h.ui.load.pos, 0);
+}
+
+#[test]
+fn f1_ends_the_press_f1_message_and_ctrl_backspace_is_not_an_edit() {
+    let mut h = Harness::new();
+    h.ui.show_press_f1 = true;
+    h.send(Command::ToggleHelp);
+    assert!(!h.ui.show_press_f1 && h.ui.show_help);
+    // Ctrl+Backspace is its own command and PrevPreset outside the editor
+    let chord = crate::keymap::KeyChord::ctrl(crate::keymap::Key::Backspace);
+    assert_eq!(crate::keymap::lookup(chord), Some(Command::CtrlBackspace));
+    assert_eq!(
+        h.send(Command::CtrlBackspace),
+        vec![UiAction::Forward(Command::PrevPreset)]
+    );
+    h.ch('s');
+    let before = h.ui.edit.as_string();
+    assert!(h.send(Command::CtrlBackspace).is_empty());
+    assert_eq!(h.ui.edit.as_string(), before);
+    h.send(Command::PrevPreset);
+    assert_eq!(h.ui.edit.as_string().len(), before.len() - 1);
+}
+
+#[test]
+fn host_toasts_carry_the_cpp_durations() {
+    use crate::ui::host_toasts as t;
+    use crate::ui::ErrCategory::{Misc, Notify, Preset};
+    let table = [
+        (t::SAVE_FAILED, 6.0, Preset, true),
+        (t::SAVE_OK, 3.0, Notify, false),
+        (t::DELETE_FAILED, 6.0, Misc, true),
+        (t::DELETE_OK, 3.0, Notify, false),
+        (t::RENAME_EXISTS, 6.0, Preset, true),
+        (t::RENAME_FAILED, 6.0, Misc, true),
+        (t::RENAME_OK, 3.0, Notify, false),
+    ];
+    for (s, d, c, b) in table {
+        assert_eq!((s.duration, s.category, s.bold), (d, c, b));
+    }
+    let mut h = Harness::new();
+    h.ui.raise(
+        t::DELETE_OK,
+        Some(&crate::ui::strings::preset_deleted("a.milk")),
+        h.now,
+    );
+    assert_eq!(h.ui.toasts[0].msg, "[preset \"a.milk\" deleted]");
+    assert_eq!(h.ui.toasts[0].expire - h.ui.toasts[0].birth, 3.0);
 }

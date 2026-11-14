@@ -36,8 +36,11 @@ pub struct Mashup {
 
 impl Ui {
     /// A bin was given a file by the host (after
-    /// [`UiAction::RandomizeMashup`]); it applies one frame sooner than a
-    /// browsed change (plugin.cpp:6456-6457).
+    /// [`UiAction::RandomizeMashup`]), plugin.cpp:6456-6457: the change is
+    /// stamped `frame + MASH_APPLY_DELAY_FRAMES` and applies when
+    /// `stamp + DELAY + 1 == frame`, that is at `frame + 3`; a browsed change
+    /// is stamped `frame` and applies at `frame + 2`, so this is one frame
+    /// later, not sooner.
     pub fn set_mash_preset(&mut self, slot: usize, index: usize, frame: u64) {
         if slot < MASH_SLOTS {
             self.mash.preset[slot] = index;

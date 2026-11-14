@@ -16,19 +16,12 @@ use super::mode::UiMode;
 use super::strings;
 use super::{ErrCategory, FieldValue, FileOp, Ui, UiAction, UiCtx, WaitString};
 use crate::commands::Command;
+use crate::library::PresetLibrary;
 
 /// `MAX_PATH` (Win32).
 const MAX_PATH: usize = 260;
 /// `sizeof(m_waitstring.szText) / sizeof(wchar_t)` (plugin.h:74).
 const WAITSTRING_CAPACITY: usize = 48000;
-
-/// The save prompt's own state.
-#[derive(Clone, Debug, Default)]
-pub struct SaveScreen {
-    /// The name typed when the overwrite question came up
-    /// (`m_waitstring.szText`), the file in question.
-    pub name: String,
-}
 
 /// `min(sizeof(szText)-1, MAX_PATH - wcslen(GetPresetDir()) - 6)`: the longest
 /// name that still fits `dir + name + ".milk"` (plugin.cpp:6111, 6540).
@@ -92,13 +85,36 @@ impl Ui {
         }
     }
 
-    /// The host's answer after a rename went through (or failed for a reason
-    /// other than the name being taken, plugin.cpp:8261-8263): back to the
-    /// load list. When the name is taken the host adds
-    /// [`strings::ERROR_FILE_EXISTS`] and the prompt stays.
-    pub fn end_rename(&mut self) {
+    /// The host's answer to [`UiAction::RenamePreset`] once it has moved the
+    /// file and rescanned `lib` (`RenamePresetFile`, plugin.cpp:8205-8263):
+    /// back to the load list, with the highlight on the renamed file
+    /// (`renamed` = the new file name with its `.milk`; 8238-8256 look the
+    /// name up, from row `m_nDirs`, and fall back to row 0). Pass `None` when
+    /// the move failed: the C++ still leaves the prompt (8261-8263) but does
+    /// not re-select. When the name is already taken the host raises
+    /// [`super::host_toasts::RENAME_EXISTS`] and does *not* call this: the prompt
+    /// stays (8209-8216).
+    pub fn end_rename(&mut self, lib: &PresetLibrary, renamed: Option<&str>) {
         self.edit.active = false;
         self.mode = UiMode::Load;
+        if let Some(name) = renamed {
+            self.load.reselect(lib, Some(name));
+        }
+    }
+
+    /// The host's answer to [`UiAction::DeletePreset`] once the file is gone
+    /// and `lib` rescanned (`DeletePresetFile`, plugin.cpp:8199-8201): the
+    /// highlight stays on the same row, or the new last one. Do not call
+    /// [`Ui::library_changed`] for this (it would jump to the playing preset).
+    pub fn end_delete(&mut self, lib: &PresetLibrary) {
+        self.load.clamp(lib);
+    }
+
+    /// The host rescanned after [`UiAction::ChangeDir`] from the load list
+    /// (plugin.cpp:6164, `UpdatePresetList(false, true, false)`: no
+    /// re-select): the highlight goes to row 0.
+    pub fn dir_changed(&mut self) {
+        self.load.pos = 0;
     }
 
     /// An import or export failed (plugin.cpp:5710-5718). The C++ builds a
@@ -235,7 +251,6 @@ impl Ui {
                 let name = self.edit.as_string();
                 let path = dir.join(format!("{name}.milk"));
                 if (ctx.file_exists)(&path) {
-                    self.save.name = name;
                     self.edit.active = false;
                     self.mode = UiMode::SaveOverwrite;
                 } else {

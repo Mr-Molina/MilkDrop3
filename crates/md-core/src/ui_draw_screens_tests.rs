@@ -107,11 +107,9 @@ fn load_screen_pages_at_most_128_rows() {
     let mut q = queue();
     let ctx = ctx!(h);
     h.ui.draw(&mut q, &layout(), &ctx);
-    assert!(
-        h.ui.load.lines > 30 && h.ui.load.lines < 128,
-        "{}",
-        h.ui.load.lines
-    );
+    // rect: top 10 + 2 prompt lines + 16/2 + 4, bottom 720 - 10 - 4:
+    // (706 - 54 - 8) / 16
+    assert_eq!(h.ui.load.lines, 40);
 }
 
 #[test]

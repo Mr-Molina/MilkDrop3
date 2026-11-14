@@ -114,6 +114,10 @@ pub enum Command {
     /// (plugin.cpp:6187, `PrevPreset(0)`). In a menu Backspace is "back"
     /// (menu.cpp:477); while editing text it deletes left (plugin.cpp:5609).
     PrevPreset,
+    /// Ctrl+Backspace: `VK_BACK` with Ctrl held. Outside text editing it is
+    /// `PrevPreset` (plugin.cpp:6187 does not read Ctrl); the string editor's
+    /// Ctrl branch has no `VK_BACK` (5516-5560), so there it does nothing.
+    CtrlBackspace,
     /// Help text: "` / ~           [un]lock current preset" (plugin.cpp:6549).
     /// Scroll Lock does the same in the C++ (plugin.cpp:5476, which sets the
     /// lock from the key's toggle state; here it toggles).
