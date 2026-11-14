@@ -111,7 +111,7 @@ fn message_overrides_beat_the_font_and_the_font_fills_the_rest() {
     assert_eq!(l.st.growth, 2.0);
     assert_eq!(l.st.duration, 3.0);
     assert_eq!(l.st.fade_time, 0.5);
-    assert_eq!(l.fade_time, Some(0.5));
+    assert!(l.writes_fade);
     assert!(!l.st.is_song_title);
     assert_eq!(l.st.start_time, 2.0);
 }
@@ -189,7 +189,7 @@ fn numbers_clamp_and_negative_picks_randomly() {
     let m = CustomMessages::parse("[message07]\ntext=seven\n[message99]\ntext=last\n");
     // `if (nMsgNum > 99) nMsgNum = 99` (plugin.cpp:8460).
     assert_eq!(m.launch(150, &mut rng(1), 0.0).unwrap().text, "last");
-    // Negative: `sel = rand()%count + 1`, one draw first (8473-8481).
+    // Negative: `sel = rand()%count + 1`, one draw first (8471).
     let mut r = rng(11);
     let want = if rng(11).next_u32().is_multiple_of(2) {
         "seven"

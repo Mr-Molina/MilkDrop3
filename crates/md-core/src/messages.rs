@@ -243,7 +243,7 @@ impl CustomMessages {
                 start_time: now,
                 duration: m.time,
             },
-            fade_time: Some(m.fade),
+            writes_fade: true,
         })
     }
 }

@@ -90,10 +90,10 @@ pub struct TitleLaunch {
     /// The numeric fields, with `start_time` = the launch's `GetTime()`.
     /// `font_size_used` is 0: the title-texture draw sets it.
     pub st: SuperText,
-    /// `fFadeTime` when the launch writes it (custom messages); a song
+    /// Whether the launch writes `fFadeTime` (`st.fade_time`; custom messages); a song
     /// title leaves the previous value in place (plugin.cpp:8546-8565 never
     /// assigns it).
-    pub fade_time: Option<f32>,
+    pub writes_fade: bool,
 }
 
 impl TitleLaunch {
@@ -126,7 +126,7 @@ impl TitleLaunch {
                 start_time: now,
                 duration,
             },
-            fade_time: None,
+            writes_fade: false,
         }
     }
 }
@@ -165,7 +165,7 @@ impl SuperTextSlot {
     pub fn start(&mut self, l: &TitleLaunch) {
         let (fade, used) = (self.st.fade_time, self.st.font_size_used);
         self.st = l.st.clone();
-        self.st.fade_time = l.fade_time.unwrap_or(fade);
+        self.st.fade_time = if l.writes_fade { l.st.fade_time } else { fade };
         self.st.font_size_used = used;
         self.text.clone_from(&l.text);
         self.face.clone_from(&l.face);
@@ -180,7 +180,10 @@ impl SuperTextSlot {
         self.st.start_time = -1.0;
     }
 
-    /// `fStartTime >= 0`.
+    /// `fStartTime >= 0` in md-core's copy only. md-render's supertext is
+    /// authoritative: this copy never gets the end-of-animation or
+    /// failed-redraw reset (mfs:1127-1128, 945-946), so after a launch this
+    /// stays true; do not use it to ask whether text is showing.
     pub fn is_active(&self) -> bool {
         self.st.is_active()
     }

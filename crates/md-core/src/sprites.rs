@@ -39,14 +39,20 @@
 //!   [`Sprites::reap`] frees it once the host has drawn the frame (killing
 //!   the texture first would make `draw_sprites` skip it).
 //!
+//! Departure: each sprite has its own VM. In the C++ a second sprite from an
+//! already-loaded file copies the first one's `tex_eel_ctx` (texmgr:76-85) and
+//! the new launch then resets that shared context (a use-after-free); not
+//! reproduced.
+//!
 //! Departure: this tree's `texmgr::RecompileExpressions` (texmgr:241-259)
 //! strips comments and returns true without ever compiling, so its sprite
 //! programs never run. The upstream MilkDrop 2 compiles there; this port
 //! compiles and runs them as the task requires, and raises the two
 //! "error in ... code" warnings for programs that do not compile.
 
+use crate::sprite_vars::Refs;
 use crate::ui::ErrCategory;
-use md_eval::{GlobalMem, Program, VarRef, Vm};
+use md_eval::{GlobalMem, Program, Vm};
 use md_preset::ini::Ini;
 use md_render::{Gpu, SpriteFrame, SpriteVars, TextureId, TextureStore};
 use std::cell::RefCell;
@@ -160,6 +166,22 @@ impl TickedSprite<TextureId> {
     }
 }
 
+/// `swprintf("%s%s", m_szMilkdrop2Path, img)` (plugin:8589-8595): the INI
+/// value is appended to the directory as text. `img[1] == ':'` (a drive
+/// path) is used as is; otherwise `\\` separators become `/`, and a leading
+/// separator is dropped so it cannot make the path absolute.
+fn sprite_path(base_dir: &Path, img: &str) -> PathBuf {
+    if img.chars().nth(1) == Some(':') {
+        return PathBuf::from(img);
+    }
+    let mut p = base_dir.to_string_lossy().replace('\\', "/");
+    if !p.is_empty() && !p.ends_with('/') {
+        p.push('/');
+    }
+    p.push_str(img.replace('\\', "/").trim_start_matches('/'));
+    PathBuf::from(p)
+}
+
 /// `GetPrivateProfileInt` as an unsigned value: leading decimal digits (after
 /// optional blanks and a sign), wrapping for negatives; `None` when absent or
 /// not a number.
@@ -221,116 +243,6 @@ fn strip_code(src: &str) -> String {
         }
     }
     out
-}
-
-/// The variables of `RegisterBuiltInVariables` (texmgr:276-310).
-struct Refs {
-    time: VarRef,
-    frame: VarRef,
-    fps: VarRef,
-    progress: VarRef,
-    bass: VarRef,
-    bass_att: VarRef,
-    mid: VarRef,
-    mid_att: VarRef,
-    treb: VarRef,
-    treb_att: VarRef,
-    x: VarRef,
-    y: VarRef,
-    sx: VarRef,
-    sy: VarRef,
-    repeatx: VarRef,
-    repeaty: VarRef,
-    rot: VarRef,
-    flipx: VarRef,
-    flipy: VarRef,
-    r: VarRef,
-    g: VarRef,
-    b: VarRef,
-    a: VarRef,
-    blendmode: VarRef,
-    done: VarRef,
-    burn: VarRef,
-}
-
-impl Refs {
-    fn register(vm: &mut Vm) -> Refs {
-        let mut v = |n: &str| vm.var(n);
-        Refs {
-            time: v("time"),
-            frame: v("frame"),
-            fps: v("fps"),
-            progress: v("progress"),
-            bass: v("bass"),
-            bass_att: v("bass_att"),
-            mid: v("mid"),
-            mid_att: v("mid_att"),
-            treb: v("treb"),
-            treb_att: v("treb_att"),
-            x: v("x"),
-            y: v("y"),
-            sx: v("sx"),
-            sy: v("sy"),
-            repeatx: v("repeatx"),
-            repeaty: v("repeaty"),
-            rot: v("rot"),
-            flipx: v("flipx"),
-            flipy: v("flipy"),
-            r: v("r"),
-            g: v("g"),
-            b: v("b"),
-            a: v("a"),
-            blendmode: v("blendmode"),
-            done: v("done"),
-            burn: v("burn"),
-        }
-    }
-
-    /// The outputs' defaults (texmgr:216-231) as a [`SpriteVars`].
-    fn set_defaults(&self, vm: &mut Vm) {
-        let d = SpriteVars::default();
-        for (r, x) in [
-            (self.x, d.x),
-            (self.y, d.y),
-            (self.sx, d.sx),
-            (self.sy, d.sy),
-            (self.repeatx, d.repeatx),
-            (self.repeaty, d.repeaty),
-            (self.rot, d.rot),
-            (self.flipx, d.flipx),
-            (self.flipy, d.flipy),
-            (self.r, d.r),
-            (self.g, d.g),
-            (self.b, d.b),
-            (self.a, d.a),
-            (self.blendmode, d.blendmode),
-            (self.done, d.done),
-            (self.burn, d.burn),
-        ] {
-            vm.set(r, x);
-        }
-    }
-
-    fn outputs(&self, vm: &Vm) -> SpriteVars {
-        SpriteVars {
-            x: vm.get(self.x),
-            y: vm.get(self.y),
-            sx: vm.get(self.sx),
-            sy: vm.get(self.sy),
-            rot: vm.get(self.rot),
-            repeatx: vm.get(self.repeatx),
-            repeaty: vm.get(self.repeaty),
-            flipx: vm.get(self.flipx),
-            flipy: vm.get(self.flipy),
-            blendmode: vm.get(self.blendmode),
-            r: vm.get(self.r),
-            g: vm.get(self.g),
-            b: vm.get(self.b),
-            a: vm.get(self.a),
-            burn: vm.get(self.burn),
-            done: vm.get(self.done),
-        }
-    }
 }
 
 struct Slot<H> {
@@ -414,11 +326,7 @@ impl<H: Copy> Sprites<H> {
             return fail(toasts);
         }
         // `img[1] != ':'`: not "x:\..." so the plugin directory is prepended.
-        let path = if img.chars().nth(1) == Some(':') {
-            PathBuf::from(img)
-        } else {
-            self.base_dir.join(img)
-        };
+        let path = sprite_path(&self.base_dir, img);
         let ck = colorkey(&self.ini, &section);
         let init = read_code(&self.ini, &section, "init_");
         let code = read_code(&self.ini, &section, "code_");
@@ -461,28 +369,24 @@ impl<H: Copy> Sprites<H> {
         let refs = Refs::register(&mut vm);
         let init_prog = compile(&mut vm, &init);
         refs.set_defaults(&mut vm);
-        match &init_prog {
-            Ok(Some(p)) => {
-                p.run(&mut vm);
-            }
-            Ok(None) => {}
-            Err(()) => toasts.push(toast(
-                format!("sprite #{n} warning: error in initialization code "),
-                6.0,
-                true,
-            )),
+        let init_failed = init_prog.is_err();
+        if let Ok(Some(p)) = &init_prog {
+            p.run(&mut vm);
         }
-        let program = match compile(&mut vm, &code) {
-            Ok(p) => p,
-            Err(()) => {
-                toasts.push(toast(
-                    format!("sprite #{n} warning: error in per-frame code"),
-                    6.0,
-                    true,
-                ));
-                None
-            }
-        };
+        let program = compile(&mut vm, &code);
+        let code_failed = program.is_err();
+        let program = program.unwrap_or(None);
+        // LoadTex ORs the two warning bits and LaunchSprite's switch matches
+        // 0x10 or 0x20 only (plugin:8674-8686): both failing (0x30) shows
+        // nothing.
+        if init_failed != code_failed {
+            let msg = if init_failed {
+                format!("sprite #{n} warning: error in initialization code ")
+            } else {
+                format!("sprite #{n} warning: error in per-frame code")
+            };
+            toasts.push(toast(msg, 6.0, true));
+        }
         self.slots[slot] = Some(Slot {
             number: n,
             handle,

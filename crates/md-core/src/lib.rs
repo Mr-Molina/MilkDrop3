@@ -11,6 +11,7 @@ pub mod messages;
 pub mod per_frame;
 pub mod per_pixel;
 pub mod shapes;
+mod sprite_vars;
 pub mod sprites;
 pub mod state;
 pub mod supertext;

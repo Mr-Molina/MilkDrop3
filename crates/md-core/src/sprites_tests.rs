@@ -83,7 +83,7 @@ fn launch_passes_the_colour_key_and_resolves_the_path() {
     assert_eq!(r.slot, Some(0));
     assert!(r.toasts.is_empty());
     assert_eq!(t.loads[0], (PathBuf::from("/md/pics/a.png"), 1_193_046));
-    // `img[1] == ':'` is an absolute path: used as it is (:8590-8596).
+    // `img[1] == ':'` is an absolute path: used as it is (plugin.cpp:8589).
     s.launch(1, &mut t, 1.0, 5);
     assert_eq!(t.loads[1].0, PathBuf::from("D:\\x\\y.png"));
 }
@@ -305,24 +305,41 @@ fn code_lines_join_without_a_separator_and_comments_end_at_the_line() {
 
 #[test]
 fn code_errors_warn_but_keep_the_sprite() {
+    // LaunchSprite's switch matches only 0x10 (init) or 0x20 (per-frame): one
+    // failing program shows its toast, both failing (0x30) shows none
+    // (plugin.cpp:8674-8686).
+    let cases = [
+        (
+            "init_1=x=;\ncode_1=y=0.1;\n",
+            Some("sprite #0 warning: error in initialization code "),
+        ),
+        (
+            "init_1=x=0.1;\ncode_1=y=;\n",
+            Some("sprite #0 warning: error in per-frame code"),
+        ),
+        ("init_1=x=;\ncode_1=y=;\n", None),
+    ];
+    for (code, want) in cases {
+        let mut t = Fake::default();
+        let mut s = sprites(&format!("[img00]\nimg=a.png\n{code}"));
+        let r = s.launch(0, &mut t, 0.0, 0);
+        assert_eq!(r.slot, Some(0));
+        let msgs: Vec<_> = r.toasts.iter().map(|t| t.msg.as_str()).collect();
+        assert_eq!(msgs, want.into_iter().collect::<Vec<_>>(), "{code}");
+        assert!(r
+            .toasts
+            .iter()
+            .all(|t| (t.duration, t.category, t.bold) == (6.0, ErrCategory::Misc, true)));
+        assert_eq!(s.tick(&inputs(0.0, 0)).len(), 1);
+    }
+}
+
+#[test]
+fn image_path_is_the_base_dir_and_the_ini_text() {
+    let mut s = sprites("[img00]\nimg=\\pics\\a.png\n");
     let mut t = Fake::default();
-    let mut s = sprites("[img00]\nimg=a.png\ninit_1=x=;\ncode_1=y=;\n");
-    let r = s.launch(0, &mut t, 0.0, 0);
-    assert_eq!(r.slot, Some(0));
-    let msgs: Vec<_> = r.toasts.iter().map(|t| t.msg.as_str()).collect();
-    assert_eq!(
-        msgs,
-        vec![
-            "sprite #0 warning: error in initialization code ",
-            "sprite #0 warning: error in per-frame code"
-        ]
-    );
-    assert!(r
-        .toasts
-        .iter()
-        .all(|t| (t.duration, t.category, t.bold) == (6.0, ErrCategory::Misc, true)));
-    // Defaults still draw it.
-    assert_eq!(s.tick(&inputs(0.0, 0)).len(), 1);
+    s.launch(0, &mut t, 0.0, 0);
+    assert_eq!(t.loads[0].0, PathBuf::from("/md/pics/a.png"));
 }
 
 #[test]
