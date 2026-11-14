@@ -1,0 +1,116 @@
+[preset00]
+fRating=3.000000
+fGammaAdj=2.000000
+fDecay=0.930000
+fVideoEchoZoom=2.000000
+fVideoEchoAlpha=0.000000
+nVideoEchoOrientation=0
+nWaveMode=1
+bAdditiveWaves=0
+bWaveDots=0
+bModWaveAlphaByVolume=0
+bMaximizeWaveColor=1
+bTexWrap=1
+bDarkenCenter=0
+bMotionVectorsOn=0
+bRedBlueStereo=0
+nMotionVectorsX=12
+nMotionVectorsY=9
+bBrighten=0
+bDarken=0
+bSolarize=0
+bInvert=0
+fWaveAlpha=0.500000
+fWaveScale=1.000000
+fWaveSmoothing=0.750000
+fWaveParam=0.000000
+fModWaveAlphaStart=0.750000
+fModWaveAlphaEnd=0.950000
+fWarpAnimSpeed=1.000000
+fWarpScale=1.000000
+fZoomExponent=1.000000
+fShader=0.000000
+zoom=0.995000
+rot=0.004000
+cx=0.500000
+cy=0.500000
+dx=0.000000
+dy=0.000000
+warp=1.000000
+sx=1.000000
+sy=1.000000
+wave_r=1.000000
+wave_g=1.000000
+wave_b=1.000000
+wave_x=0.500000
+wave_y=0.500000
+ob_size=0.010000
+ob_r=0.000000
+ob_g=0.000000
+ob_b=0.000000
+ob_a=0.000000
+ib_size=0.010000
+ib_r=0.250000
+ib_g=0.250000
+ib_b=0.250000
+ib_a=0.000000
+shapecode_0_enabled=1
+shapecode_0_sides=6
+shapecode_0_additive=1
+shapecode_0_thickOutline=1
+shapecode_0_textured=0
+shapecode_0_num_inst=1
+shapecode_0_x=0.500
+shapecode_0_y=0.500
+shapecode_0_rad=0.08000
+shapecode_0_ang=0.00000
+shapecode_0_tex_ang=0.00000
+shapecode_0_tex_zoom=1.00000
+shapecode_0_r=1.000
+shapecode_0_g=0.500
+shapecode_0_b=0.000
+shapecode_0_a=0.800
+shapecode_0_r2=0.000
+shapecode_0_g2=0.000
+shapecode_0_b2=1.000
+shapecode_0_a2=0.200
+shapecode_0_border_r=1.000
+shapecode_0_border_g=1.000
+shapecode_0_border_b=1.000
+shapecode_0_border_a=0.600
+shape_0_init1=t1 = 0.3;
+shape_0_init2=t2 = 1.7;
+shape_0_per_frame1=x = 0.5 + t1*cos(time*t2);
+shape_0_per_frame2=y = 0.5 + t1*sin(time*t2)*1.33;
+shape_0_per_frame3=ang = time;
+shape_0_per_frame4=rad = 0.06 + 0.03*bass;
+shapecode_1_enabled=1
+shapecode_1_sides=3
+shapecode_1_additive=0
+shapecode_1_thickOutline=0
+shapecode_1_textured=0
+shapecode_1_num_inst=1
+shapecode_1_x=0.500
+shapecode_1_y=0.500
+shapecode_1_rad=0.12000
+shapecode_1_ang=0.00000
+shapecode_1_tex_ang=0.00000
+shapecode_1_tex_zoom=1.00000
+shapecode_1_r=0.200
+shapecode_1_g=1.000
+shapecode_1_b=0.400
+shapecode_1_a=0.600
+shapecode_1_r2=0.000
+shapecode_1_g2=1.000
+shapecode_1_b2=0.000
+shapecode_1_a2=0.000
+shapecode_1_border_r=1.000
+shapecode_1_border_g=1.000
+shapecode_1_border_b=1.000
+shapecode_1_border_a=0.100
+shape_1_per_frame1=x = 0.5 + 0.2*sin(time*0.83);
+shape_1_per_frame2=y = 0.5 + 0.2*cos(time*1.21);
+shape_1_per_frame3=ang = -time*2;
+per_frame_1=ob_size = 0.005;
+per_frame_2=ob_a = 0.4 + 0.3*sin(time);
+per_frame_3=ob_r = 0.5;

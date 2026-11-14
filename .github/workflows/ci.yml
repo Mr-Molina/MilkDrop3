@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install Linux system packages
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse-dev mesa-vulkan-drivers libvulkan1 pkg-config
+
+      # Linux only, so the variables are truly absent (not empty) on macOS/Windows:
+      # GPU tests must run on llvmpipe and fail (not skip) without an adapter.
+      - name: Set GPU test environment
+        if: runner.os == 'Linux'
+        run: |
+          echo "MD_REQUIRE_GPU=1" >> "$GITHUB_ENV"
+          echo "WGPU_ADAPTER_NAME=llvmpipe" >> "$GITHUB_ENV"
+
+      # rustup reads rust-toolchain.toml (channel and components) and installs it.
+      - name: Install toolchain from rust-toolchain.toml
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+      - name: Native-code guard
+        shell: bash
+        run: scripts/check-no-native-build.sh
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      # The renderer golden suite is #[ignore]d in the default run (about 270 s
+      # on lavapipe, over the 180 s budget); run it explicitly.
+      # Linux only: the baselines were blessed on lavapipe, and MD_REQUIRE_GPU
+      # is set here too so the step cannot silently skip.
+      - name: renderer golden suite
+        if: runner.os == 'Linux'
+        env:
+          MD_REQUIRE_GPU: "1"
+          WGPU_ADAPTER_NAME: llvmpipe
+        run: cargo test -p milkdrop --test golden_suite -- --include-ignored

@@ -1,0 +1,13 @@
+# Binary test assets: never diff or normalize.
+*.png binary
+*.wav binary
+
+# Shell scripts run on CI runners and must keep LF endings everywhere.
+*.sh text eol=lf
+
+# Review Focus #3 fixture: its CRLF line endings, UTF-8 BOM and trailing junk
+# are the point of the file; git must store and check out its bytes unchanged.
+tests/presets/edge/crlf_bom_junk.milk -text
+
+# Help text: the no-CR test pins LF; keep it on every platform.
+assets/help.txt text eol=lf

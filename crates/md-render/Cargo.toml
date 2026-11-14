@@ -1,0 +1,28 @@
+[package]
+name = "md-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+wgpu.workspace = true
+md-hlsl = { path = "../md-hlsl" }
+md-preset = { path = "../md-preset" }
+md-analysis = { path = "../md-analysis" }
+md-text = { path = "../md-text" }
+image.workspace = true
+ddsfile.workspace = true
+rand_pcg.workspace = true
+rand_core.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+naga = { workspace = true, features = ["wgsl-in"] }
+md-testkit = { path = "../../tests/support/md-testkit" }
+tracing-subscriber = { workspace = true }

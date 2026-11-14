@@ -1,0 +1,9 @@
+/target/
+/.superpowers/
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store
+Thumbs.db
+tests/golden/rust/**/*.diff.png

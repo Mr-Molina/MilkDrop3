@@ -1,0 +1,13 @@
+[package]
+name = "md-preset"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+md-eval = { path = "../md-eval" }
+md-testkit = { path = "../../tests/support/md-testkit" }

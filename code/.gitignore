@@ -1,0 +1,19 @@
+# Visual Studio build output (C++ reference build)
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+.vs/
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.tlog/
+*.log
+*.suo
+*.idb
+*.iobj
+*.ipdb
+*.exp
+*.lib
+*.recipe

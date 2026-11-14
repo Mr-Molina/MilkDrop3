@@ -1,0 +1,33 @@
+[package]
+name = "milkdrop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "milkdrop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "milkdrop"
+path = "src/main.rs"
+
+[dependencies]
+md-render = { path = "../../crates/md-render" }
+md-preset = { path = "../../crates/md-preset" }
+md-analysis = { path = "../../crates/md-analysis" }
+md-audio = { path = "../../crates/md-audio" }
+image.workspace = true
+rand_pcg.workspace = true
+rand_core.workspace = true
+thiserror.workspace = true
+# FixedClock: the headless driver shares the tests' deterministic clock.
+md-testkit = { path = "../../tests/support/md-testkit" }
+
+[dev-dependencies]
+serde.workspace = true
+toml.workspace = true

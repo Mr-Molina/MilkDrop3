@@ -1,0 +1,16 @@
+### Finding Verdicts
+1. [Important] Init inputs follow the C++ load mode — ADDRESSED. `InitMode { Instant(InitInputs), Blended }` at state.rs (enum, diff hunk @@ -31); `from_preset_with` maps Blended to `loaded = None`. With None, the preset VM gets no `pf_refs.load` (no preset scalars, no time/fps/frame/progress/band/mesh/pixel/aspect/now), and `WaveState::load`/`ShapeState::load` skip the whole input block: inputs, q, r/g/b/a/samples and the shape's own scalars, so q = 0 and nothing else is set. This matches the ruling (fresh VMs, all 0). Instant: C++ `LoadCustomWave/ShapePerFrameEvallibVars` (milkdropfs.cpp:2442-2463, 2400-2440) write time/frame/fps/progress/bands, q from `pState->var_pf_q` (the preset's post-init q = `q_init`), t from the stale `t_values_after_init_code` (Rust 0), and the wave's or shape's own scalars (r,g,b,a,samples / x..border_a, instance 0). They do not copy preset-level scalars such as decay into the wave/shape VM. The Rust instant path sets exactly that set (custom.rs), so it matches. `from_preset` = Instant(default). The wrong doc comment is replaced and the progress-from-outgoing-timers note is documented. Tests: `instant_init_sees_the_preset_values_and_inputs` (q1=time+meshx, q2=decay, q3=bass; wave t1=q1, t2=r, t3=time; shape t1=sides, t2=q2, t3=bass) and `blended_init_sees_nothing_loaded` (all 0, with decay confirmed > 0). Both modes covered.
+2. [Folded] Citations — ADDRESSED. Sed-checked: 1615-1651 is the QUICK FIX block (1615 comment, 1651 closing); `CState::Import` is state.cpp:1263; plugin.cpp 7251 (swap), 7259 (Import), 7267 (m_fPresetStartTime), 7293 (m_pNewState->Import) all correct; state.cpp:1742/1813 are the q-copy lines on init compile failure; state.h:440-441 are q/monitor_after_init_code. custom.rs:3 now 1728-1790 / 1800-1850 (wave loop is 1726-1792, shape init starts 1800, per-frame ends about 1850), which covers the per-point and per-frame parts.
+3. [Folded] `rand_pcg` is now a dev-dependency (Cargo.toml diff; the test file still uses it, the library uses `rand_core`). The "q/monitor with no init code are 0 on purpose" comment is present on `from_preset_with`.
+
+### New Breakage in the Fix Diff
+None Critical or Important.
+- Minor: `blended_init_sees_nothing_loaded` does not discriminate the "wave/shape q = 0" path. Under Blended `q_init` is already 0 (q1 = time+meshx, q2 = decay both read 0), so wave t1=q1 and shape t2=q2 would be 0 even if q_init were passed through. A constant `q1 = 5` in per_frame_init (preset q_init = 5, wave q must still be 0) would pin it. The code is correct; the test is weaker than its comment implies.
+- Minor: stale `ImportFromFile` remains in the module doc, state.rs:2 (outside this diff's hunks, but the finding's rename was meant to cover it). The cited lines 1282/1452 are right; only the name is wrong (`CState::Import`).
+- Not done, disclosed by the implementer: wave/shape init compile failure does not copy q_init into that VM (state.cpp:1742/1813). Harmless, since 7.3 reloads q every frame.
+
+### Out-of-Scope Observations
+None.
+
+### Verdict
+**Fix round:** All findings addressed, no new Critical/Important breakage. Two Minor notes above (test strength, state.rs:2 wording).

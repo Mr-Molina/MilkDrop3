@@ -1,0 +1,17 @@
+[package]
+name = "md-eval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+md-testkit = { path = "../../tests/support/md-testkit" }
+proptest = { workspace = true }
+
+[[bench]]
+name = "per_pixel"
+harness = false

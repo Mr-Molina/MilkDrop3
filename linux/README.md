@@ -81,7 +81,7 @@ A convenient launcher script is included in the repository. Use it to easily sta
 
 ```bash
 # Download the launcher script from the repository
-wget -O milkdrop3-launcher.sh "https://raw.githubusercontent.com/milkdrop2077/MilkDrop3/main/milkdrop3-launcher.sh"
+wget -O milkdrop3-launcher.sh "https://raw.githubusercontent.com/milkdrop2077/MilkDrop3/main/linux/milkdrop3-launcher.sh"
 
 # Make it executable
 chmod +x milkdrop3-launcher.sh

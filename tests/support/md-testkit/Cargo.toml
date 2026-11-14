@@ -1,0 +1,15 @@
+[package]
+name = "md-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+image = { workspace = true }
+
+[dev-dependencies]
+hound = { workspace = true }

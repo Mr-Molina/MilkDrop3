@@ -1,0 +1,15 @@
+### Task 6.7a: one ortho projection for all fixed-function draws (controller-ruled fix across 6.2-6.7)
+
+**Why:** the C++ draws every 2D fixed-function primitive under `D3DXMatrixOrthoLH(&Ortho2D, 2.0f, -2.0f, 0.0f, 1.0f)` (code/vis_milk2/support.cpp:179; textmgr.cpp:238 does the same), so clip_y = -vertex_y. The C++ builders emit pre-projection coordinates, e.g. a shape centre at `var_pf_y*-2+1` (milkdropfs.cpp:2300), so preset y=0.75 lands at clip +0.5, the TOP half. md-render's wave.rs (~500-502), shapes.rs (~103), custom_waves.rs and overlays.rs send that y straight to clip space, so they draw vertically mirrored. warp.rs, comp_fixed.rs and the title (6.7) each negate y themselves. See the `Task 6.7a: Ruling:` ledger line and task-6.7-review.md's escalation section.
+
+**Requirements:**
+- Apply the ortho(2,-2) projection once, in the fixed-function draw path (DrawBatch and/or the fixed-function vertex shader that all fixed draws share), so that every fixed draw gets clip_y = -y exactly as D3D does. Keep the D3D9 half-pixel shift (VsParams) correct relative to the flip: check the sign of the shift after the change against the C++ pixel-centre convention.
+- Builders emit the C++ pre-projection coordinates verbatim (with the C++ line cited). Remove the per-builder negations in warp.rs, comp_fixed.rs and the title code, and audit EVERY fixed-function caller (wave, shapes, custom waves, motion vectors, borders, darken_center, title, warp, comp_fixed, sprites hook, and any other DrawBatch user) so nothing is flipped twice or not at all. Pipelines that do not use the fixed-function path (preset warp/comp shaders with their own built-in VS) must keep the orientation they have now if it is already right; prove it with the tests below.
+- Delete the unused duplicate assets/shaders/title.wgsl, and its references in md-hlsl tests/builtin_wgsl.rs and the shaders README (6.7 minor).
+- Text (6.6) uses pluginshell's ortho(w,h) and has pixel-position tests; it must stay as it is.
+
+- [ ] **Step 1:** Write failing GPU orientation tests, one per draw kind, each with an off-centre primitive and an assertion on the readback's top versus bottom half (readback row 0 = top of the image): wave mode 6 line at wave_y=0.75 lands in the top half; a shape at y=0.75 in the top half; a custom wave with points at y=0.75 in the top half; motion vectors with mv_dy shifting them up; the outer border's top edge; darken_center centred; title anim placement per the C++; and warp/comp orientation (an asymmetric source image survives a warp+composite with zoom 1/rot 0 unflipped).
+- [ ] **Step 2:** Run them. Expected: the fixed-function ones FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run the full md-render GPU suite and apps/milkdrop golden_basic with MD_REQUIRE_GPU=1. Expected: PASS. If tests/golden/rust/default_60.png changes, view it, report the DSSIM and the cause before re-blessing (shader_rings.milk draws a wave that the comp shader ignores, so no change is expected).
+- [ ] **Step 5:** Commit: `fix(render): single ortho projection for fixed-function draws`
